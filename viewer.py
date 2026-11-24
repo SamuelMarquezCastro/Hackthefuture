@@ -10,6 +10,9 @@ import webbrowser
 from pathlib import Path
 
 ROOT = Path(__file__).parent
+ZAAL = ROOT / "zaal"  # de Raadszaal: 3D-weergave van hetzelfde debat op /zaal
+SOORTEN = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8",
+           ".glb": "model/gltf-binary", ".png": "image/png", ".txt": "text/plain; charset=utf-8"}
 
 
 def main():
@@ -25,6 +28,12 @@ def main():
                 return self.stuur(ROOT / "viewer.html", "text/html; charset=utf-8")
             if pad in ("/trace.json", "/verdict.json"):
                 return self.stuur(map_ / pad[1:], "application/json; charset=utf-8")
+            if pad in ("/zaal", "/zaal/"):
+                return self.stuur(ZAAL / "index.html", SOORTEN[".html"])
+            if pad.startswith("/zaal/"):
+                bestand = (ZAAL / pad[len("/zaal/"):]).resolve()
+                if ZAAL.resolve() in bestand.parents and bestand.suffix in SOORTEN:
+                    return self.stuur(bestand, SOORTEN[bestand.suffix])
             self.send_error(404)
 
         def stuur(self, bestand, soort):
@@ -43,7 +52,7 @@ def main():
 
     server = http.server.ThreadingHTTPServer(("127.0.0.1", port), Handler)
     url = f"http://127.0.0.1:{port}/"
-    print(f"Debatviewer op {url} (leest {map_}). Stop met Ctrl+C.")
+    print(f"Debatviewer op {url} (leest {map_}). Raadszaal op {url}zaal. Stop met Ctrl+C.")
     webbrowser.open(url)
     try:
         server.serve_forever()

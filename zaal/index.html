@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Raadszaal van Achrona</title>
+<style>
+  :root { --paars: #2a1650; --rand: #e8dcff; --diep: #0b0614; --goud: #e8c45a; --tekst: #f4efff; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: var(--diep); color: var(--tekst);
+    font-family: "Courier New", ui-monospace, monospace; }
+  canvas#scherm { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; cursor: pointer; }
+  .pixel { font-weight: 700; letter-spacing: .04em; text-shadow: 2px 2px 0 #000; }
+
+  /* Bovenbalk */
+  #kop { position: fixed; top: 0; left: 0; right: 0; display: flex; align-items: flex-start; gap: 16px; padding: 14px 18px; pointer-events: none; }
+  #titel { font-size: clamp(14px, 1.6vw, 22px); color: var(--goud); }
+  #titel small { display: block; font-size: .7em; color: #b9a8e6; margin-top: 2px; }
+  #knoppen { margin-left: auto; display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; pointer-events: auto; }
+  #knoppen button, #knoppen a { font: inherit; font-size: 14px; font-weight: 700; color: var(--tekst); background: #1b1036cc; border: 2px solid #6a52a8;
+    padding: 4px 10px; cursor: pointer; text-decoration: none; text-shadow: 1px 1px 0 #000; image-rendering: pixelated; }
+  #knoppen button:hover, #knoppen a:hover { border-color: var(--rand); background: #2a1a52; }
+  #knoppen .aan { border-color: var(--goud); color: var(--goud); }
+
+  /* Beurtenteller */
+  #teller { position: fixed; top: 64px; right: 18px; font-size: clamp(13px, 1.2vw, 17px); text-align: right; pointer-events: none; }
+  #teller b { color: var(--goud); font-size: 1.5em; }
+
+  /* Open vragen: briefje op perkament */
+  #briefje { position: fixed; top: 74px; left: 18px; width: min(300px, 28vw); background: #e9d8ad; color: #3b2412;
+    font-family: Georgia, "Times New Roman", serif; font-size: 14px; padding: 12px 14px 10px; border: 3px solid #7a5428;
+    box-shadow: 4px 4px 0 #000a; transform: rotate(-1.2deg); max-height: 46vh; overflow: auto; }
+  #briefje h3 { margin: 0 0 6px; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; }
+  #briefje ul { margin: 0; padding-left: 18px; }
+  #briefje li { margin: 3px 0; }
+  #briefje li.nieuw::after { content: " ✦ nieuw"; color: #a0300c; font-size: 11px; font-weight: 700; }
+  #briefje li.af { text-decoration: line-through; opacity: .6; }
+  #briefje .leeg { font-style: italic; opacity: .7; }
+  @media (max-width: 800px) { #briefje { display: none; } }
+
+  /* Tekstbox in rechtszaalstijl */
+  #dialoog { position: fixed; left: 50%; bottom: 3vh; transform: translateX(-50%); width: min(1100px, 94vw); min-height: 23vh;
+    background: linear-gradient(180deg, #221245f2, #0e0822f2); border: 4px solid var(--rand); outline: 3px solid #3a2266;
+    box-shadow: 0 0 0 6px #000a, 0 10px 40px #000; padding: 22px 28px 26px; font-size: clamp(16px, 1.75vw, 25px); line-height: 1.4;
+    transition: opacity .15s; }
+  #dialoog.weg { opacity: 0; pointer-events: none; }
+  #naambord { position: absolute; top: -1.75em; left: 16px; padding: 3px 16px; background: var(--kleur, #6a52a8);
+    border: 3px solid var(--rand); color: #fff; font-size: .8em; text-transform: uppercase; }
+  #naambord .pijl { opacity: .85; }
+  #tekst { min-height: 3.6em; }
+  #sub { margin-top: 10px; font-size: .72em; color: #cfc2f2; font-style: italic; opacity: 0; transition: opacity .3s; }
+  #sub.zicht { opacity: 1; }
+  #verder { position: absolute; right: 18px; bottom: 8px; color: var(--goud); animation: knip .8s steps(2) infinite; opacity: 0; }
+  #verder.zicht { opacity: 1; }
+  #pagina { position: absolute; right: 44px; bottom: 9px; font-size: .55em; color: #9a8ac8; }
+  @keyframes knip { 50% { visibility: hidden; } }
+  .id { display: inline-block; padding: 0 .25em; margin: 0 .05em; border-radius: 3px; background: color-mix(in srgb, var(--k) 30%, #000);
+    color: #fff; border: 2px solid var(--k); font-size: .82em; line-height: 1.25; }
+
+  /* Label boven een hoofd (toolcalls) */
+  .label { position: fixed; transform: translate(-50%, -100%); background: #0e0822ee; border: 2px solid var(--k, #e8dcff); color: #fff;
+    padding: 3px 10px; font-size: clamp(12px, 1.1vw, 16px); white-space: nowrap; pointer-events: none; transition: opacity .2s; }
+  .label::after { content: ""; position: absolute; left: 50%; bottom: -9px; margin-left: -6px; border: 6px solid transparent; border-top-color: var(--k, #e8dcff); }
+
+  /* Uitroep bij geschillen */
+  #uitroep { position: fixed; left: 50%; top: 40%; transform: translate(-50%, -50%) rotate(-6deg) scale(0); font-size: clamp(48px, 9vw, 140px);
+    font-weight: 900; font-style: italic; color: #fff3c4; -webkit-text-stroke: 4px #5a0a14; text-shadow: 6px 6px 0 #5a0a14, 0 0 40px #ff3b3b;
+    pointer-events: none; padding: .1em .5em; background: radial-gradient(closest-side, #ff4a2acc, #c8102e99 60%, transparent);
+    transition: transform .18s cubic-bezier(.2, 1.8, .4, 1); }
+  #uitroep.zicht { transform: translate(-50%, -50%) rotate(-6deg) scale(1); }
+  .schud { animation: schud .35s; }
+  @keyframes schud { 20% { translate: -10px 4px; } 40% { translate: 8px -6px; } 60% { translate: -6px 3px; } 80% { translate: 4px -2px; } }
+
+  /* Finale: het Verdict op een perkamentrol */
+  #finale { position: fixed; inset: 0; display: grid; place-items: center; background: #05020acc; opacity: 0; pointer-events: none; transition: opacity .6s; }
+  #finale.zicht { opacity: 1; pointer-events: auto; }
+  #rol { width: min(860px, 92vw); max-height: 86vh; overflow: auto; background: #ead9ae; color: #2e1a0c; font-family: Georgia, serif;
+    border: 6px double #7a5428; box-shadow: 0 0 0 4px #3b2412, 0 20px 80px #000; padding: 26px 34px; transform: scaleY(.02); transform-origin: top;
+    transition: transform .9s cubic-bezier(.2, .9, .3, 1); }
+  #finale.zicht #rol { transform: scaleY(1); }
+  #rol h2 { margin: 0 0 4px; text-align: center; letter-spacing: .12em; text-transform: uppercase; font-size: 22px; }
+  #rol .onder { text-align: center; font-style: italic; margin-bottom: 14px; opacity: .75; }
+  #rol h3 { margin: 14px 0 4px; font-size: 13px; letter-spacing: .1em; text-transform: uppercase; color: #6a3a10; }
+  #rol .deel { margin: 8px 0; }
+  #rol .meter { height: 10px; background: #00000022; border: 1px solid #00000044; margin-top: 4px; position: relative; }
+  #rol .meter i { position: absolute; inset: 0 auto 0 0; background: var(--k); }
+  #rol .zeker { font-size: 12px; opacity: .8; }
+  #rol .id { font-family: "Courier New", monospace; font-size: 12px; color: #fff; }
+  #rol ol { margin: 4px 0; padding-left: 22px; }
+  #rol .sluit { display: block; margin: 16px auto 0; font: inherit; padding: 6px 16px; background: #3b2412; color: #ead9ae; border: 0; cursor: pointer; }
+
+  #laden { position: fixed; inset: 0; display: grid; place-items: center; font-size: 20px; color: var(--goud); background: var(--diep); }
+</style>
+<script type="importmap">{ "imports": { "three": "/zaal/vendor/three.module.min.js" } }</script>
+</head>
+<body>
+<canvas id="scherm"></canvas>
+
+<div id="kop">
+  <div id="titel" class="pixel">RAADSZAAL VAN ACHRONA<small id="status">wachten op trace.json…</small></div>
+  <div id="knoppen" class="pixel">
+    <button id="k-opnieuw" title="Opnieuw afspelen vanaf het begin">⏮ Opnieuw</button>
+    <button id="k-pauze" title="Pauze (P)">⏸</button>
+    <button id="k-volgende" title="Volgende stap (→)">⏭</button>
+    <button id="k-tempo" title="Afspeelsnelheid">1×</button>
+    <button id="k-live" title="Spring naar de laatste stand">● Live</button>
+    <button id="k-geluid" title="Geluid aan/uit">🔇</button>
+    <a href="/" title="De gewone debatviewer">Debatviewer ↗</a>
+  </div>
+</div>
+<div id="teller" class="pixel"></div>
+
+<div id="briefje"><h3>Open vragen van de Koning</h3><div id="vragen"><span class="leeg">Nog geen open vragen.</span></div></div>
+
+<div id="dialoog" class="pixel weg">
+  <div id="naambord"></div>
+  <div id="tekst"></div>
+  <div id="sub"></div>
+  <div id="pagina"></div>
+  <div id="verder">▼</div>
+</div>
+
+<div id="uitroep">BEZWAAR!</div>
+<div id="finale"><div id="rol"></div></div>
+<div id="laden" class="pixel">De Raad wordt bijeengeroepen…</div>
+
+<script type="module" src="/zaal/zaal.js"></script>
+</body>
+</html>
