@@ -580,7 +580,11 @@ async function speelBericht(b) {
   const sprong = speler.sprong, rol = b.spreker;
   shot("dichtbij", zetels[rol] ? rol : "koning"); spotOp(zetels[rol] ? rol : "koning");
   await wacht(400); if (controleer(sprong)) return;
-  const pag = paginas(schoon(b.tekst));
+  // Een blok "Broncitaten" (ruwe bronregels) tonen we niet in de tekstbox, maar als label: de debatviewer toont ze voluit.
+  const tekst = String(b.tekst ?? ""), knip = tekst.search(/\n\s*[*#]*\s*Broncitaten\s*[*]*\s*:?/i);
+  const citaten = knip < 0 ? 0 : (tekst.slice(knip).match(/^\s*[-•]\s/gm) || []).length;
+  if (citaten && zetels[rol]) label(rol, `📜 ${citaten} broncitaten`, 2600);
+  const pag = paginas(schoon(knip < 0 ? tekst : tekst.slice(0, knip)));
   for (let k = 0; k < pag.length; k++) {
     await toonDialoog(rol, esc(naam(rol)), pag[k], "", pag.length > 1 ? `${k + 1}/${pag.length}` : "");
     if (controleer(sprong)) break;
