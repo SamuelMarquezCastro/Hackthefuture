@@ -1,0 +1,10 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "installCommand": "echo 'Static viewer: no dependencies required'",
+  "buildCommand": "node scripts/build-viewer.mjs",
+  "outputDirectory": "dist",
+  "rewrites": [
+    { "source": "/zaal", "destination": "/zaal/index.html" }
+  ]
+}
