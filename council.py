@@ -102,6 +102,12 @@ STOPPEN
 Stop zelfstandig als alle doelen onderbouwd zijn of aantoonbaar onbeslist. Elk doel moet vóór
 stoppen minstens één gerichte Raadslid-beurt hebben gekregen. Stop niet met een open doel
 waarvoor je zelf een uitvoerbare vervolgvraag noemt. Je hoeft het budget niet op te maken.
+Werk naar een eigen stopbesluit toe: zodra elk doel onderbouwd of onbeslist is en geen open
+geschil nog een toetsbeurt mist, stop je, ook als er beurten over zijn. Een beurt die alleen
+herhaalt of het verdict niet kan veranderen, is verspild. Een doel dat al door twee verschillende
+Rollen behandeld is, houd je alleen open met een nieuwe Rol en een onderscheidende toetsvraag;
+anders zet je het op onderbouwd (met bewijs) of onbeslist (met de concrete blokkade).
+stopvoorwaarden in de context toont wat je nu nog belet zelfstandig te stoppen.
 Als het budget bijna op is, onderzoek het belangrijkste inhoudelijke gat, geen detail dat het
 uiteindelijke besluit niet verandert. Neem de open onzekerheden mee naar het verdict.
 Bij nul resterende beurten is stoppen verplicht: rol, vraag en doel zijn null. Werk onderzoek,
@@ -109,7 +115,12 @@ geschillen en open_vragen nog bij op basis van het laatste antwoord. Open doelen
 deze verplichte budgetstop blijven bestaan; noem de budgetgrens eerlijk in de reden.
 
 GESCHILLEN
-Houd alleen echte botsende verklaringen van minstens twee sprekende Rollen bij. Gebruik
+Houd alleen echte botsende verklaringen van minstens twee sprekende Rollen bij.
+Een open geschil (uitkomst null) is een beslissende leemte: besteed er een gerichte beurt aan.
+Vraag een betrokken Rol, of een derde Rol wiens bron het onderwerp raakt, naar het onderscheidende
+bewijs dat één standpunt weerlegt of bevestigt. Vul daarna uitkomst en bewijs in als het debat
+dat draagt. Blijft het onbeslist, laat uitkomst null en zeg in reden waarom de bronnen het niet
+beslechten. Stop niet zolang een open geschil nog geen toetsbeurt kreeg. Gebruik
 onderwerp, standpunten (alleen betrokken Rollen), uitkomst (null zolang open) en bewijs.
 standpunten is een JSON-object {"rol": "standpunt"}, geen lijst.
 'Geen standpunt', niet kunnen verifiëren, bronafscherming en gewone kennislacunes zijn geen
@@ -238,6 +249,32 @@ def doel_beurten(beurten):
     return resultaat
 
 
+def geschil_sleutel(geschil):
+    return " ".join(str(geschil.get("onderwerp", "")).lower().split())
+
+
+def toetsbeurten_na_geschil(geschil, beurten):
+    """Aantal Raadslid-beurten sinds het geschil voor het eerst in een routering werd vastgelegd."""
+    sleutel, gezien, teller = geschil_sleutel(geschil), False, 0
+    for b in beurten:
+        if not gezien and b["soort"] == "routering":
+            gezien = any(geschil_sleutel(g) == sleutel for g in b.get("geschillen") or [])
+        elif gezien and b["soort"] == "bericht" and b["spreker"] in ROLLEN:
+            teller += 1
+    return teller
+
+
+def ongetoetste_geschillen(geschillen, beurten):
+    return [g["onderwerp"] for g in geschillen if g.get("uitkomst") is None and not toetsbeurten_na_geschil(g, beurten)]
+
+
+def verzadigde_doelen(onderzoek, beurten):
+    """Open doelen die al door twee verschillende Rollen behandeld zijn, zonder een nieuwe Rol als vervolg."""
+    behandeld = doel_beurten(beurten)
+    return [d for d, st in onderzoek.items()
+            if st["status"] == "open" and len(set(behandeld[d])) >= 2 and (st["rol"] is None or st["rol"] in behandeld[d])]
+
+
 def router_schema(rollen):
     return {
         "type": "object",
@@ -347,6 +384,9 @@ def controleer_routering(keuze, rollen, gesproken, beurten=()):
         open_doelen = [d for d in DOELEN if keuze["onderzoek"][d]["status"] == "open" or not behandeld[d]]
         if open_doelen and not budget_op:
             raise ValueError("Stoppen is voorbarig: stel een gerichte vraag over " + ", ".join(open_doelen))
+        ongetoetst = ongetoetste_geschillen(keuze["geschillen"], beurten)
+        if ongetoetst and not budget_op:
+            raise ValueError("Stoppen is voorbarig: geef het open geschil eerst een gerichte toetsbeurt: " + "; ".join(ongetoetst))
     return keuze
 
 
@@ -369,6 +409,13 @@ async def kies_volgende(beurten, leden, koning, opties, verbruik):
         "vorig_onderzoek": vorige.get("onderzoek", leeg_onderzoek()),
         "geschillen": vorige.get("geschillen", []),
         "bewijscatalogus": bewijscatalogus(beurten),
+        "stopvoorwaarden": {
+            "doelen_zonder_beurt": [d for d, r in doel_beurten(beurten).items() if not r],
+            "open_doelen": [d for d, st in vorige.get("onderzoek", leeg_onderzoek()).items() if st["status"] == "open"],
+            "ongetoetste_geschillen": ongetoetste_geschillen(vorige.get("geschillen", []), beurten),
+            # Door twee Rollen behandeld en zonder nieuwe Rol: beslis onderbouwd/onbeslist of kies een nieuwe Rol.
+            "verzadigde_doelen": verzadigde_doelen(vorige.get("onderzoek", leeg_onderzoek()), beurten),
+        },
     }
     keuze = await vraag_json(koning, context,
                              lambda keuze: controleer_routering(keuze, rollen, gesproken, beurten), opties, verbruik)

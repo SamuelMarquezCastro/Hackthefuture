@@ -134,6 +134,31 @@ class RouteringTests(unittest.IsolatedAsyncioTestCase):
         gehoord = ["engineer", "engineer", "oracle", "historian"]
         self.assertEqual(controleer_routering(keuze, self.rollen, gehoord, beurten), keuze)
 
+    def test_verzadigd_doel_wordt_gemeld_als_stopvoorwaarde(self):
+        beurten = []
+        for rol in ("engineer", "oracle"):
+            beurten.extend([{"soort": "routering", "spreker": "koning", "aan": rol, "doel": "ingreep"},
+                            {"soort": "bericht", "spreker": rol, "tekst": "Eigen waarneming."}])
+        onderzoek = council.leeg_onderzoek()
+        onderzoek["ingreep"].update(rol="engineer", volgende_vraag="Nog een detail?")
+        self.assertEqual(council.verzadigde_doelen(onderzoek, beurten), ["ingreep"])
+        onderzoek["ingreep"].update(rol="historian")
+        self.assertEqual(council.verzadigde_doelen(onderzoek, beurten), [])
+        onderzoek["ingreep"].update(status="onbeslist", rol=None, volgende_vraag=None, blokkade="Geen naam in de bronnen.")
+        self.assertEqual(council.verzadigde_doelen(onderzoek, beurten), [])
+
+    def test_zelf_stoppen_wacht_op_een_toetsbeurt_voor_een_open_geschil(self):
+        beurten, keuzes = afgerond_onderzoek()
+        stop = keuzes[-1]
+        geschil = {"onderwerp": "Klokfout of registerfout", "standpunten": {"engineer": "Klok.", "historian": "Register."},
+                   "uitkomst": None, "bewijs": []}
+        stop["geschillen"] = [geschil]
+        with self.assertRaisesRegex(ValueError, "toetsbeurt"):
+            controleer_routering(stop, self.rollen, self.rollen, beurten)
+        beurten.extend([{"soort": "routering", "spreker": "koning", "aan": "oracle", "doel": "mechanisme", "geschillen": [geschil]},
+                        {"soort": "bericht", "spreker": "oracle", "tekst": "Mijn bron toont het tijdstip."}])
+        self.assertEqual(controleer_routering(stop, self.rollen, self.rollen, beurten), stop)
+
     def test_nieuwe_perspectieven_gaan_voor_een_derde_beurt(self):
         keuze = {**self.keuze, "doel": "herstel"}
         with self.assertRaisesRegex(ValueError, "nog niet gesproken perspectief"):
