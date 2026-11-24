@@ -89,6 +89,13 @@
   #rol .zeker { font-size: 12px; opacity: .8; }
   #rol .id { font-family: "Courier New", monospace; font-size: 12px; color: #fff; }
   #rol ol { margin: 4px 0; padding-left: 22px; }
+  #rol { position: relative; }
+  #rol { padding-top: 120px !important; }
+  #rol .zegel { position: absolute; top: 14px; left: 50%; margin-left: -48px; width: 96px; height: 96px; border-radius: 50%; display: grid; place-items: center;
+    background: radial-gradient(circle at 40% 35%, #d8343a, #8a0c14 70%); color: #ffd9c0; font-family: Georgia, serif; font-weight: 700;
+    font-size: 15px; letter-spacing: .08em; box-shadow: 0 0 0 5px #a3121c, 3px 4px 0 6px #0005; transform: rotate(-14deg) scale(3); opacity: 0; }
+  #finale.zicht #rol .zegel { animation: zegel .35s cubic-bezier(.5, 0, .8, .4) 1.2s forwards; }
+  @keyframes zegel { to { transform: rotate(-14deg) scale(1); opacity: 1; } }
   #rol .sluit { display: block; margin: 16px auto 0; font: inherit; padding: 6px 16px; background: #3b2412; color: #ead9ae; border: 0; cursor: pointer; }
 
 

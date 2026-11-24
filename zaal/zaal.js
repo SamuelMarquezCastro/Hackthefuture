@@ -354,11 +354,75 @@ function zetActieveRollen(rollen) {
 const spot = new THREE.SpotLight(0xffffff, 0, 12, 0.32, 0.6, 1);
 scene.add(spot); scene.add(spot.target);
 let spotDoel = 0;
+let aandachtRol = null;   // iedereen kijkt naar wie spreekt
 function spotOp(rol) {
+  aandachtRol = rol && zetels[rol] ? rol : null;
   if (!rol || !zetels[rol]) { spotDoel = 0; return; }
   const h = hoofdPos(rol);
   spot.position.set(h.x * 0.75, 7.5, h.z * 0.75); spot.target.position.set(h.x, 1.4, h.z);
   spot.color.set(KLEUR[rol]).lerp(new THREE.Color(0xffffff), 0.55); spotDoel = 60;
+}
+
+// ───────────────────────── Bewijs op tafel: per Rol een groeiende stapel perkamentjes ─────────────────────────
+const bewijsStapels = {};   // rol → aantal kaartjes
+const vliegers = [];        // kaartjes die van de spreker naar de tafel vliegen
+const PERKAMENT = lambert({ color: 0xeadcb4 });
+function bewijsPlek(rol, n) {
+  const z = zetels[rol]; const naarMidden = z.pos.clone().setY(0).normalize().negate();
+  const zij = new THREE.Vector3(naarMidden.z, 0, -naarMidden.x);
+  const kolom = n % 3, laag = Math.floor(n / 3);
+  const p = z.pos.clone().addScaledVector(naarMidden, 1.55).addScaledVector(zij, (kolom - 1) * 0.3);
+  p.y = TAFEL_Y + 0.012 + laag * 0.026;
+  return p;
+}
+function maakKaartje(rol) {
+  const g = new THREE.Group();
+  const blad = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.018, 0.32), PERKAMENT); g.add(blad);
+  const streep = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.02, 0.06), lambert({ color: new THREE.Color(KLEUR[rol]) }));
+  streep.position.z = -0.12; g.add(streep);
+  g.rotation.y = zetels[rol].hoek + (Math.random() - 0.5) * 0.5;
+  g.userData.bewijs = true; zaal.add(g); return g;
+}
+function legBewijs(rol, aantal, animeer = true) {
+  if (!zetels[rol] || !aantal) return;
+  for (let i = 0; i < aantal; i++) {
+    const n = bewijsStapels[rol] = (bewijsStapels[rol] || 0) + 1;
+    if (n > 18) continue;                       // de stapel blijft leesbaar
+    const kaart = maakKaartje(rol), doel = bewijsPlek(rol, n - 1);
+    if (!animeer) { kaart.position.copy(doel); continue; }
+    const start = hoofdPos(rol).add(new THREE.Vector3(0, -0.4, 0));
+    kaart.position.copy(start); kaart.visible = false;
+    vliegers.push({ kaart, start, doel, t: -i * 0.22 });
+  }
+}
+function wisBewijs() {
+  for (const k of [...zaal.children]) if (k.userData.bewijs) zaal.remove(k);
+  vliegers.length = 0; for (const r in bewijsStapels) delete bewijsStapels[r];
+}
+function updateVliegers(dt) {
+  for (let i = vliegers.length - 1; i >= 0; i--) {
+    const v = vliegers[i]; v.t += dt * speler.tempo;
+    if (v.t < 0) continue;
+    const f = Math.min(1, v.t / 0.7); v.kaart.visible = true;
+    v.kaart.position.lerpVectors(v.start, v.doel, f); v.kaart.position.y += Math.sin(f * Math.PI) * 0.6;
+    v.kaart.rotation.x = (1 - f) * 2.5;
+    if (f >= 1) vliegers.splice(i, 1);
+  }
+}
+function aantalBewijs(b) {
+  if (Array.isArray(b.bronverwijzingen)) return b.bronverwijzingen.length;
+  const pre = { archmage: "ARC", engineer: "ENG", guardian_keeper: "GUA", historian: "HIS", oracle: "ORA", beast_master: "BEA" }[b.spreker];
+  return new Set((String(b.tekst || "").match(ID_RE) || []).filter(i => i.startsWith(pre))).size;
+}
+
+// ───────────────────────── Kristal: voortgang van het onderzoek ─────────────────────────
+const KRISTAL_PAARS = new THREE.Color(0xb48cff), KRISTAL_GLOED_PAARS = new THREE.Color(0x6a2cff);
+const KRISTAL_GOUD = new THREE.Color(0xffe080), KRISTAL_GLOED_GOUD = new THREE.Color(0xc08010);
+const kristalStaat = { doel: 0, nu: 0, rood: 0 };
+function zetVoortgang(onderzoek) {
+  if (!onderzoek || typeof onderzoek !== "object") { kristalStaat.doel = 0; return; }
+  const st = Object.values(onderzoek).map(o => o?.status);
+  kristalStaat.doel = st.length ? (st.filter(x => x === "onderbouwd").length + 0.5 * st.filter(x => x === "onbeslist").length) / st.length : 0;
 }
 
 // ───────────────────────── Camera ─────────────────────────
@@ -396,6 +460,10 @@ function updateCamera(dt, t) {
     cam.doelPos.copy(cam.pos); cam.doelKijk.copy(cam.kijk);
     camera.position.copy(cam.pos); camera.lookAt(cam.kijk); return;
   }
+  if (cam.modus === "finale") {
+    cam.baan += dt * 0.08; cam.snelheid = 0.9;
+    cam.doelPos.set(Math.sin(cam.baan) * 6.5, 8.8, Math.cos(cam.baan) * 6.5); cam.doelKijk.set(0, 1.2, 0);
+  }
   if (cam.modus === "overzicht") {
     cam.baan += dt * 0.06;
     cam.doelPos.set(Math.sin(cam.baan) * 9.5, 5.2 + Math.sin(t * 0.2) * 0.3, Math.cos(cam.baan) * 9.5); cam.doelKijk.set(0, 1.5, 0);
@@ -430,6 +498,18 @@ function bezwaarGeluid() {
     g.gain.setValueAtTime(0.0001, t + d); g.gain.exponentialRampToValueAtTime(0.12, t + d + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + d + 0.5);
     o.connect(g).connect(c.destination); o.start(t + d); o.stop(t + d + 0.55);
   }
+}
+
+function toon(f, start, duur, type = "triangle", v = 0.05) {
+  if (!geluid.aan || !geluid.ctx) return;
+  const c = geluid.ctx, t0 = c.currentTime + start, o = c.createOscillator(), g = c.createGain();
+  o.type = type; o.frequency.value = f; g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(v, t0 + 0.02);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + duur); o.connect(g).connect(c.destination); o.start(t0); o.stop(t0 + duur + 0.05);
+}
+function slotakkoord() { for (const [f, s] of [[146.83, 0], [220, 0], [293.66, 0.05], [369.99, 0.1], [440, 0.15], [587.33, 0.6]]) toon(f, s, 3.2, s > 0.5 ? "square" : "triangle", 0.04); }
+function tingeling(i) { toon(880 + i * 60, 0, 0.35, "sine", 0.03); }
+function bonk() {
+  toon(70, 0, 0.5, "sine", 0.25); toon(140, 0, 0.25, "square", 0.05);
 }
 
 // Intromuziek: een korte plechtige 8-bit fanfare met bas, akkoord en trommelslagen (ongeveer 5,5 seconden).
@@ -645,7 +725,7 @@ function toolTekst(b) {
 async function speelRoutering(b) {
   const sprong = speler.sprong;
   shot("dichtbij", "koning"); spotOp("koning");
-  zetOpenVragen(b.open_vragen); zetOnderzoek(b.onderzoek, b.doel); verbergKaarten();
+  zetOpenVragen(b.open_vragen); zetOnderzoek(b.onderzoek, b.doel); zetVoortgang(b.onderzoek); verbergKaarten();
   await wacht(450); if (controleer(sprong)) return;
   const bord = (b.aan ? `Koning <span class="pijl">→</span> ${esc(naam(b.aan))}` : "Koning") + (b.doel ? ` · ${esc(DOELEN[b.doel] || b.doel)}` : "");
   if (b.aan && zetels[b.aan]) zetels[b.aan].gloed = 1;
@@ -692,6 +772,7 @@ async function speelBericht(b) {
     await wacht(leestijd(pag[k]), true); if (controleer(sprong)) break;
   }
   verbergDialoog(); verbergKaarten();
+  if (rol !== "koning") legBewijs(rol, aantalBewijs(b));
 }
 
 async function speelGeschil(g, nr) {
@@ -703,7 +784,7 @@ async function speelGeschil(g, nr) {
   verbergKaarten();
   // BEZWAAR! alleen als minstens twee Rollen in de trace botsende standpunten hebben.
   if (Object.keys(g.standpunten || {}).length >= 2) {
-    const u = $("uitroep"); u.classList.add("zicht"); document.body.classList.add("schud"); bezwaarGeluid();
+    const u = $("uitroep"); u.classList.add("zicht"); document.body.classList.add("schud"); bezwaarGeluid(); kristalStaat.rood = 1.8;
     await wacht(1100); u.classList.remove("zicht"); document.body.classList.remove("schud"); if (controleer(sprong)) return;
   }
   await toonDialoog("koning", `Geschil ${nr}`, g.onderwerp || ""); if (controleer(sprong)) return;
@@ -741,9 +822,10 @@ function toonFinale() {
     <h3>Herstelplan</h3><ol>${(verdict.acties || []).map(a => `<li>${idHtml(a.actie)}</li>`).join("")}</ol>
     <h3>Risico's</h3><ol>${(verdict.risicos || []).map(r => `<li>${idHtml(r.risico)} — <i>${idHtml(r.mitigatie)}</i></li>`).join("")}</ol>
     ${vs ? `<h3>Voorspelling: dag ${esc(vs.dag)}</h3>${idHtml(vs.bewering)} ${(vs.bewijs || []).map(idHtml).join(" ")}` : ""}
-    <button class="sluit">Sluiten</button>`;
+    <button class="sluit">Sluiten</button><div class="zegel">VERDICT</div>`;
   $("rol").querySelector(".sluit").onclick = e => { e.stopPropagation(); $("finale").classList.remove("zicht"); };
   $("finale").classList.add("zicht");
+  setTimeout(() => { if ($("finale").classList.contains("zicht")) bonk(); }, 1350);
 }
 async function speelFinale() {
   const sprong = speler.sprong, gen = speler.gen;
@@ -751,8 +833,24 @@ async function speelFinale() {
   try {
     await toonDialoog("koning", "Koning", "Hoor, hoor! De Raad van Achrona heeft een Verdict.");
     if (!controleer(sprong)) await wacht(1400, true);
+    if (!controleer(sprong)) {
+      // De kaarsen gaan één voor één weer aan, het kristal wordt goud en de camera stijgt boven de tafel.
+      verbergDialoog(); spotOp(null); cam.modus = "finale"; cam.baan = Math.atan2(cam.pos.x, cam.pos.z);
+      kristalStaat.doel = 1; slotakkoord();
+      for (let i = kaarsen.length - 1; i >= 0; i--) {
+        kaarsen[i].aan = true; kaarsen[i].vlam.visible = true; tingeling(i);
+        await wacht(220); if (controleer(sprong)) break;
+      }
+      if (!controleer(sprong)) await wacht(1600);
+    }
   } finally {
-    if (speler.gen === gen) { verbergDialoog(); spotOp(null); shot("overzicht"); toonFinale(); }
+    if (speler.gen === gen) {
+      verbergDialoog(); spotOp(null); kristalStaat.doel = 1;
+      for (const k of kaarsen) { k.aan = true; k.vlam.visible = true; }
+      $("teller").innerHTML = `<b>${speler.kaarsenUit}</b>/${BEURTENBUDGET} beurten<br>🕯 het Verdict is uitgesproken`;
+      if (cam.modus !== "finale") { cam.modus = "finale"; cam.baan = Math.atan2(cam.pos.x, cam.pos.z); }
+      toonFinale();
+    }
   }
 }
 
@@ -798,6 +896,7 @@ function herstart() {
   vorigeVragen = null; $("vragen").innerHTML = '<span class="leeg">Nog geen open vragen.</span>';
   gezien.clear(); zetOnderzoek(null); verbergKaarten();
   $("finale").classList.remove("zicht"); verbergDialoog(); zetKaarsen(0, false); shot("overzicht"); spotOp(null);
+  wisBewijs(); kristalStaat.doel = 0; kristalStaat.rood = 0;
 }
 function naarLive() {
   if (!trace) return;
@@ -805,7 +904,8 @@ function naarLive() {
   speler.gen++; speler.i = b.length; speler.kaarsenUit = b.filter(isRaadslid).length;
   zetKaarsen(speler.kaarsenUit, false);
   const laatste = [...b].reverse().find(x => x.soort === "routering"); vorigeVragen = null;
-  if (laatste) { zetOpenVragen(laatste.open_vragen, false); zetOnderzoek(laatste.onderzoek, laatste.doel); }
+  if (laatste) { zetOpenVragen(laatste.open_vragen, false); zetOnderzoek(laatste.onderzoek, laatste.doel); zetVoortgang(laatste.onderzoek); }
+  wisBewijs(); for (const x of b) if (isRaadslid(x)) legBewijs(x.spreker, aantalBewijs(x), false);
   gezien.clear(); for (const x of b) for (const g of x.geschillen || []) gezien.add(geschilSleutel(g));
   if (trace.status === "klaar") for (const g of trace.geschillen || []) gezien.add(geschilSleutel(g));
   verbergKaarten();
@@ -833,7 +933,7 @@ async function regisseur() {
         speler.fase = "finale"; continue;
       }
       if (speler.fase === "finale" && trace.status === "klaar" && verdict && verdict.run_id === trace.run_id) { await speelFinale(); speler.fase = "einde"; continue; }
-      verbergDialoog(); spotOp(null); if (cam.modus !== "overzicht") shot("overzicht");
+      verbergDialoog(); spotOp(null); if (cam.modus !== "overzicht" && cam.modus !== "finale") shot("overzicht");
       await wacht(400);
     } catch (e) {
       if (e !== AFGEBROKEN) { console.error(e); await new Promise(r => setTimeout(r, 500)); }
@@ -877,13 +977,30 @@ function frame() {
     else k.rook.material.opacity = 0;
   }
   kristal.rotation.y += dt * 0.6; kristal.position.y = TAFEL_Y + 1.05 + Math.sin(t * 1.3) * 0.08;
-  kristalLicht.intensity = 5 + Math.sin(t * 2) * 1.2;
+  // Kristal: paars (alles open) → goud (onderzoek rond); rood bij een geschil
+  kristalStaat.nu += (kristalStaat.doel - kristalStaat.nu) * (1 - Math.exp(-dt * 1.5));
+  if (kristalStaat.rood > 0) kristalStaat.rood = Math.max(0, kristalStaat.rood - dt);
+  const rood = Math.min(1, kristalStaat.rood) * (0.6 + 0.4 * Math.sin(t * 20));
+  kristal.material.color.copy(KRISTAL_PAARS).lerp(KRISTAL_GOUD, kristalStaat.nu).lerp(new THREE.Color(0xff3030), rood);
+  kristal.material.emissive.copy(KRISTAL_GLOED_PAARS).lerp(KRISTAL_GLOED_GOUD, kristalStaat.nu).lerp(new THREE.Color(0xc00000), rood);
+  kristal.material.emissiveIntensity = 0.9 + kristalStaat.nu * 0.8;
+  kristal.scale.setScalar(1 + kristalStaat.nu * 0.25); kristal.scale.y *= 1.5;
+  kristalLicht.color.copy(kristal.material.emissive);
+  kristalLicht.intensity = (5 + kristalStaat.nu * 6) * (1 + Math.sin(t * 2) * 0.2);
+  updateVliegers(dt);
   // Personages ademen; wie gloeit (toolcall / gekozen) licht op
   for (const [rol, z] of Object.entries(zetels)) {
     if (!z.figuur) continue;
     z.figuur.position.y = Math.sin(t * 1.6 + z.hoek * 3) * 0.015;
     const spreekt = dlg.rol === rol && !!dlg.klaar;
     z.figuur.rotation.x = spreekt ? Math.sin(t * 14) * 0.025 : 0;
+    // Kijk naar wie spreekt (alleen draaien op de stoel, maximaal ±60°)
+    let gewenst = 0;
+    if (aandachtRol && aandachtRol !== rol) {
+      const lokaal = z.plek.worldToLocal(zetels[aandachtRol].pos.clone());
+      gewenst = Math.max(-1.05, Math.min(1.05, Math.atan2(lokaal.x, lokaal.z)));
+    }
+    z.figuur.rotation.y += (gewenst - z.figuur.rotation.y) * (1 - Math.exp(-dt * 3));
     if (z.gloed > 0) z.gloed = Math.max(0, z.gloed - dt * 0.7);
     if (z.voorwerp?.material?.emissive) z.voorwerp.material.emissiveIntensity = 0.3 + z.gloed * 2.5 + Math.sin(t * 3) * 0.05;
   }
@@ -898,4 +1015,5 @@ zetKaarsen(0, false);
 $("laden").remove();
 cam.modus = "intro"; cam.introT = 0;
 if (params.has("zonderintro")) eindigIntro();
+if (params.has("debug")) window.__zaal = { zetels, spotOp, shot, cam, legBewijs, zetVoortgang, kristalStaat };   // alleen voor tests
 frame(); lus(); regisseur();
