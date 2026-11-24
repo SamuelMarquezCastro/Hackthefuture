@@ -537,13 +537,48 @@ function zetOpenVragen(vragen, animeer = true) {
   vorigeVragen = vragen;
 }
 
+// ───────────────────────── Onderzoeksbord (doelen + status uit routering.onderzoek) ─────────────────────────
+const DOELEN = { ingreep: "Ingreep", mechanisme: "Mechanisme", verloop: "Verloop", herstel: "Herstel", risicos: "Risico's" };
+const STATUS_TEKEN = { open: "○", onderbouwd: "●", onbeslist: "◐" };
+function zetOnderzoek(onderzoek, doel) {
+  if (!onderzoek || typeof onderzoek !== "object") { $("bord").innerHTML = ""; return; }
+  $("bord").innerHTML = Object.entries(onderzoek).map(([d, o]) => {
+    const st = o?.status || "open";
+    return `<span class="${esc(st)}${d === doel ? " nu" : ""}" title="${esc(st)}: ${esc(o?.samenvatting || "")}">${STATUS_TEKEN[st] || "○"} ${esc(DOELEN[d] || d)}</span>`;
+  }).join("");
+}
+
+// ───────────────────────── Bewijskaarten (bronverwijzingen van een Raadslid) ─────────────────────────
+function toonKaarten(rol, verwijzingen, controle) {
+  const doos = $("kaarten"); doos.innerHTML = "";
+  if (!Array.isArray(verwijzingen) || !verwijzingen.length) return;
+  const kop = document.createElement("div"); kop.className = "kop";
+  kop.textContent = `BEWIJS VAN ${naam(rol).toUpperCase()}${controle === "geslaagd" ? " · citaten gecontroleerd ✓" : controle ? " · controle: " + controle : ""}`;
+  doos.appendChild(kop);
+  verwijzingen.slice(0, 3).forEach((v, i) => {
+    const k = document.createElement("div"); k.className = "kaart";
+    const pre = String(v.id || "").slice(0, 3);
+    k.style.setProperty("--k", KLEUR[PREFIX[pre]] || KLEUR[rol] || "#7a5428");
+    k.innerHTML = `<span class="id" style="background:${KLEUR[PREFIX[pre]] || "#555"}">${esc(v.id)}</span>
+      <div class="bk" title="${esc(v.bronkop)}">${esc(v.bronkop || "")}</div>«${esc(v.citaat || "")}»`;
+    doos.appendChild(k); setTimeout(() => k.classList.add("in"), 120 + i * 140);
+  });
+  if (verwijzingen.length > 3) { const m = document.createElement("div"); m.className = "kop"; m.textContent = `+${verwijzingen.length - 3} meer bronnen in de debatviewer`; doos.appendChild(m); }
+}
+function verbergKaarten() { $("kaarten").innerHTML = ""; }
+
+// Geschillen zijn momentopnames: elk geschil (op onderwerp) speelt maar één keer.
+const gezien = new Set();
+const geschilSleutel = g => String(g?.onderwerp || JSON.stringify(g?.standpunten || {})).trim().toLowerCase();
+const isVerdictJson = t => { const x = String(t ?? "").trim(); if (!x.startsWith("{")) return false; try { return "oorzaak" in JSON.parse(x); } catch { return false; } };
+
 // ───────────────────────── De scènes ─────────────────────────
 function isRaadslid(b) { return b.soort === "bericht" && NAMEN[b.spreker] && !["koning", "mens"].includes(b.spreker); }
 
 function toolTekst(b) {
   const a = b.argumenten || {};
   if (b.soort === "bestand") return `📄 leest ${esc(b.bestand)}`;
-  if (b.tool === "lees_kennisbron") return "📖 opent de Kennisbron";
+  if (b.tool === "lees_kennisbron") return "📖 raadpleegt eigen bron";
   if (b.tool === "zoek") return `🔎 zoekt “${esc(a.term ?? Object.values(a)[0] ?? "")}”`;
   if (b.tool === "toon") { const ids = a.ids || []; return `📜 bekijkt ${esc(ids.slice(0, 3).join(", "))}${ids.length > 3 ? ` +${ids.length - 3}` : ""}`; }
   return `⚙ ${esc(b.tool)}`;
@@ -552,9 +587,9 @@ function toolTekst(b) {
 async function speelRoutering(b) {
   const sprong = speler.sprong;
   shot("dichtbij", "koning"); spotOp("koning");
-  zetOpenVragen(b.open_vragen);
+  zetOpenVragen(b.open_vragen); zetOnderzoek(b.onderzoek, b.doel); verbergKaarten();
   await wacht(450); if (controleer(sprong)) return;
-  const bord = b.aan ? `Koning <span class="pijl">→</span> ${esc(naam(b.aan))}` : "Koning";
+  const bord = (b.aan ? `Koning <span class="pijl">→</span> ${esc(naam(b.aan))}` : "Koning") + (b.doel ? ` · ${esc(DOELEN[b.doel] || b.doel)}` : "");
   if (b.aan && zetels[b.aan]) zetels[b.aan].gloed = 1;
   const vraag = b.aan ? `${naam(b.aan)}, ${kleineLetter(b.vraag || "spreek.")}` : "Genoeg. De Raad heeft gesproken: het debat is gesloten.";
   const reden = b.aan ? `Waarom ${naam(b.aan)}? ${b.reden || ""}${b.reden === "vaste volgorde" ? " (de Koning kiest nog niet zelf)" : ""}` : `Waarom nu? ${b.reden || ""}`;
@@ -563,6 +598,10 @@ async function speelRoutering(b) {
     await toonDialoog("koning", bord, stukken[k][0], "", stukken.length > 1 ? `${k + 1}/${stukken.length}` : "", stukken[k][1]);
     if (controleer(sprong)) return;
     await wacht(leestijd(stukken[k][0]), true); if (controleer(sprong)) return;
+  }
+  for (const g of b.geschillen || []) {
+    const sl = geschilSleutel(g); if (gezien.has(sl)) continue;
+    gezien.add(sl); await speelGeschil(g, gezien.size); if (controleer(sprong)) return;
   }
 }
 
@@ -580,17 +619,21 @@ async function speelBericht(b) {
   const sprong = speler.sprong, rol = b.spreker;
   shot("dichtbij", zetels[rol] ? rol : "koning"); spotOp(zetels[rol] ? rol : "koning");
   await wacht(400); if (controleer(sprong)) return;
-  // Een blok "Broncitaten" (ruwe bronregels) tonen we niet in de tekstbox, maar als label: de debatviewer toont ze voluit.
-  const tekst = String(b.tekst ?? ""), knip = tekst.search(/\n\s*[*#]*\s*Broncitaten\s*[*]*\s*:?/i);
-  const citaten = knip < 0 ? 0 : (tekst.slice(knip).match(/^\s*[-•]\s/gm) || []).length;
-  if (citaten && zetels[rol]) label(rol, `📜 ${citaten} broncitaten`, 2600);
-  const pag = paginas(schoon(knip < 0 ? tekst : tekst.slice(0, knip)));
+  let tekst = typeof b.antwoord === "string" && b.antwoord.trim() ? b.antwoord : String(b.tekst ?? "");
+  if (rol === "koning" && isVerdictJson(tekst)) tekst = "De Raad heeft genoeg gehoord. Ik schrijf het Verdict neer.";
+  // Bronverwijzingen worden bewijskaarten; zonder dat veld knippen we een oud blok "Broncitaten" weg.
+  if (Array.isArray(b.bronverwijzingen) && b.bronverwijzingen.length) toonKaarten(rol, b.bronverwijzingen, b.citaatcontrole);
+  else {
+    const knip = tekst.search(/\n\s*[*#]*\s*Broncitaten\s*[*]*\s*:?/i);
+    if (knip >= 0) { const n = (tekst.slice(knip).match(/^\s*[-•]\s/gm) || []).length; if (n && zetels[rol]) label(rol, `📜 ${n} broncitaten`, 2600); tekst = tekst.slice(0, knip); }
+  }
+  const pag = paginas(schoon(tekst));
   for (let k = 0; k < pag.length; k++) {
     await toonDialoog(rol, esc(naam(rol)), pag[k], "", pag.length > 1 ? `${k + 1}/${pag.length}` : "");
     if (controleer(sprong)) break;
     await wacht(leestijd(pag[k]), true); if (controleer(sprong)) break;
   }
-  verbergDialoog();
+  verbergDialoog(); verbergKaarten();
 }
 
 async function speelGeschil(g, nr) {
@@ -599,9 +642,12 @@ async function speelGeschil(g, nr) {
   verbergDialoog();
   if (rollen.length >= 2) shot("duel", rollen[0], rollen[1]); else shot("overzicht");
   await wacht(500); if (controleer(sprong)) return;
-  // BEZWAAR!
-  const u = $("uitroep"); u.classList.add("zicht"); document.body.classList.add("schud"); bezwaarGeluid();
-  await wacht(1100); u.classList.remove("zicht"); document.body.classList.remove("schud"); if (controleer(sprong)) return;
+  verbergKaarten();
+  // BEZWAAR! alleen als minstens twee Rollen in de trace botsende standpunten hebben.
+  if (Object.keys(g.standpunten || {}).length >= 2) {
+    const u = $("uitroep"); u.classList.add("zicht"); document.body.classList.add("schud"); bezwaarGeluid();
+    await wacht(1100); u.classList.remove("zicht"); document.body.classList.remove("schud"); if (controleer(sprong)) return;
+  }
   await toonDialoog("koning", `Geschil ${nr}`, g.onderwerp || ""); if (controleer(sprong)) return;
   await wacht(leestijd(g.onderwerp || ""), true); if (controleer(sprong)) return;
   for (const [rol, standpunt] of Object.entries(g.standpunten || {})) {
@@ -678,14 +724,21 @@ async function lus() {
   setTimeout(lus, 1500);
 }
 function updateStatus() {
-  const s = $("status");
-  if (!trace) { s.textContent = "wachten op trace.json… start de Council"; return; }
-  const live = speler.i >= (trace.beurten || []).length - 1;
-  s.textContent = `${trace.status === "bezig" ? "de Raad vergadert" : "de Raad is klaar"} · ${live ? "live" : "herhaling"} · ${trace.run_id || ""}`;
+  const s = $("status"), m = $("modus"), f = $("fout");
+  if (!trace) { s.textContent = "wachten op trace.json… start de Council"; m.className = "pixel"; m.textContent = ""; return; }
+  const n = (trace.beurten || []).length;
+  const live = trace.status === "bezig" && speler.i >= n - 2;
+  const fout = trace.status === "fout";
+  m.className = "pixel " + (fout ? "fout" : live ? "live" : "herhaling");
+  m.textContent = fout ? "⚠ RUN MISLUKT" : live ? "LIVE" : "▶ HERHALING";
+  f.classList.toggle("zicht", fout);
+  if (fout) f.textContent = `⚠ Deze run is afgebroken (status "fout"). ${trace.fout || "Bekijk de terminal van de Council."} Er is geen geldig Verdict.`;
+  s.textContent = `${fout ? "run mislukt" : trace.status === "bezig" ? "de Raad vergadert" : "de Raad is klaar"} · ${trace.run_id || ""}`;
 }
 function herstart() {
   speler.gen++; speler.i = 0; speler.fase = "debat"; speler.kaarsenUit = 0; speler.huidigeSpreker = null;
   vorigeVragen = null; $("vragen").innerHTML = '<span class="leeg">Nog geen open vragen.</span>';
+  gezien.clear(); zetOnderzoek(null); verbergKaarten();
   $("finale").classList.remove("zicht"); verbergDialoog(); zetKaarsen(0, false); shot("overzicht"); spotOp(null);
 }
 function naarLive() {
@@ -693,9 +746,13 @@ function naarLive() {
   const b = trace.beurten || [];
   speler.gen++; speler.i = b.length; speler.kaarsenUit = b.filter(isRaadslid).length;
   zetKaarsen(speler.kaarsenUit, false);
-  const laatste = [...b].reverse().find(x => x.soort === "routering"); vorigeVragen = null; if (laatste) zetOpenVragen(laatste.open_vragen, false);
+  const laatste = [...b].reverse().find(x => x.soort === "routering"); vorigeVragen = null;
+  if (laatste) { zetOpenVragen(laatste.open_vragen, false); zetOnderzoek(laatste.onderzoek, laatste.doel); }
+  gezien.clear(); for (const x of b) for (const g of x.geschillen || []) gezien.add(geschilSleutel(g));
+  if (trace.status === "klaar") for (const g of trace.geschillen || []) gezien.add(geschilSleutel(g));
+  verbergKaarten();
   verbergDialoog(); $("finale").classList.remove("zicht");
-  speler.fase = trace.status === "klaar" ? "finale" : "debat";
+  speler.fase = trace.status === "klaar" ? "finale" : trace.status === "fout" ? "fout" : "debat";
 }
 
 async function regisseur() {
@@ -704,12 +761,20 @@ async function regisseur() {
       if (!trace) { await wacht(400); continue; }
       const b = trace.beurten || [];
       if (speler.i < b.length) { const beurt = b[speler.i]; await speelBeurt(beurt); speler.i++; continue; }
+      if (trace.status === "fout" && speler.fase === "debat") {
+        speler.fase = "fout"; shot("dichtbij", "koning"); spotOp("koning");
+        await toonDialoog("koning", "Koning", "De zitting is afgebroken. Er komt geen Verdict uit deze run.", "", "", "reden");
+        await wacht(2500, true); continue;
+      }
       if (trace.status === "klaar" && speler.fase === "debat") {
         speler.fase = "geschillen";
-        for (const [n, g] of (trace.geschillen || []).entries()) await speelGeschil(g, n + 1);
+        for (const g of trace.geschillen || []) {
+          const sl = geschilSleutel(g); if (gezien.has(sl)) continue;
+          gezien.add(sl); await speelGeschil(g, gezien.size);
+        }
         speler.fase = "finale"; continue;
       }
-      if (speler.fase === "finale" && verdict && verdict.run_id === trace.run_id) { await speelFinale(); speler.fase = "einde"; continue; }
+      if (speler.fase === "finale" && trace.status === "klaar" && verdict && verdict.run_id === trace.run_id) { await speelFinale(); speler.fase = "einde"; continue; }
       verbergDialoog(); spotOp(null); if (cam.modus !== "overzicht") shot("overzicht");
       await wacht(400);
     } catch (e) {
