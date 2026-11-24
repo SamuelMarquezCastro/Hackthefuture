@@ -4,26 +4,27 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Raadszaal van Achrona</title>
+<link rel="stylesheet" href="/zaal/fonts/vt323.css">
 <style>
   :root { --paars: #2a1650; --rand: #e8dcff; --diep: #0b0614; --goud: #e8c45a; --tekst: #f4efff; }
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; overflow: hidden; background: var(--diep); color: var(--tekst);
     font-family: "Courier New", ui-monospace, monospace; }
   canvas#scherm { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; cursor: pointer; }
-  .pixel { font-weight: 700; letter-spacing: .04em; text-shadow: 2px 2px 0 #000; }
+  .pixel { font-family: "VT323", "Courier New", monospace; font-weight: 400; letter-spacing: .02em; text-shadow: 2px 2px 0 #000; }
 
   /* Bovenbalk */
   #kop { position: fixed; top: 0; left: 0; right: 0; display: flex; align-items: flex-start; gap: 16px; padding: 14px 18px; pointer-events: none; }
-  #titel { font-size: clamp(14px, 1.6vw, 22px); color: var(--goud); }
+  #titel { font-size: clamp(20px, 2.1vw, 30px); color: var(--goud); line-height: 1; }
   #titel small { display: block; font-size: .7em; color: #b9a8e6; margin-top: 2px; }
   #knoppen { margin-left: auto; display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; pointer-events: auto; }
-  #knoppen button, #knoppen a { font: inherit; font-size: 14px; font-weight: 700; color: var(--tekst); background: #1b1036cc; border: 2px solid #6a52a8;
+  #knoppen button, #knoppen a { font: inherit; font-size: 19px; font-weight: 400; line-height: 1; color: var(--tekst); background: #1b1036cc; border: 2px solid #6a52a8;
     padding: 4px 10px; cursor: pointer; text-decoration: none; text-shadow: 1px 1px 0 #000; image-rendering: pixelated; }
   #knoppen button:hover, #knoppen a:hover { border-color: var(--rand); background: #2a1a52; }
   #knoppen .aan { border-color: var(--goud); color: var(--goud); }
 
   /* Beurtenteller */
-  #teller { position: fixed; top: 64px; right: 18px; font-size: clamp(13px, 1.2vw, 17px); text-align: right; pointer-events: none; }
+  #teller { position: fixed; top: 64px; right: 18px; font-size: clamp(17px, 1.5vw, 22px); line-height: 1.05; text-align: right; pointer-events: none; }
   #teller b { color: var(--goud); font-size: 1.5em; }
 
   /* Open vragen: briefje op perkament */
@@ -41,11 +42,16 @@
   /* Tekstbox in rechtszaalstijl */
   #dialoog { position: fixed; left: 50%; bottom: 3vh; transform: translateX(-50%); width: min(1100px, 94vw); min-height: 23vh;
     background: linear-gradient(180deg, #221245f2, #0e0822f2); border: 4px solid var(--rand); outline: 3px solid #3a2266;
-    box-shadow: 0 0 0 6px #000a, 0 10px 40px #000; padding: 22px 28px 26px; font-size: clamp(16px, 1.75vw, 25px); line-height: 1.4;
+    box-shadow: 0 0 0 6px #000a, 0 10px 40px #000; padding: 20px 28px 24px; font-size: clamp(22px, 2.35vw, 34px); line-height: 1.12;
+    display: grid; grid-template-columns: auto 1fr; column-gap: 22px;
     transition: opacity .15s; }
   #dialoog.weg { opacity: 0; pointer-events: none; }
-  #naambord { position: absolute; top: -1.75em; left: 16px; padding: 3px 16px; background: var(--kleur, #6a52a8);
-    border: 3px solid var(--rand); color: #fff; font-size: .8em; text-transform: uppercase; }
+  #naambord { position: absolute; top: -1.45em; left: 16px; padding: 2px 16px; background: var(--kleur, #6a52a8);
+    border: 3px solid var(--rand); color: #fff; font-size: .85em; text-transform: uppercase; }
+  #portret { grid-row: 1 / span 3; width: 4.6em; height: 4.6em; border: 3px solid var(--kleur, #e8dcff); outline: 2px solid #000;
+    image-rendering: pixelated; background: #1b1036; align-self: start; margin-top: 4px; }
+  #portret:not([src]) { visibility: hidden; width: 0; border: 0; outline: 0; }
+  #tekst, #sub { grid-column: 2; }
   #naambord .pijl { opacity: .85; }
   #tekst { min-height: 3.6em; }
   #tekst.reden { font-style: italic; color: #d8ccf6; }
@@ -61,7 +67,7 @@
 
   /* Label boven een hoofd (toolcalls) */
   .label { position: fixed; transform: translate(-50%, -100%); background: #0e0822ee; border: 2px solid var(--k, #e8dcff); color: #fff;
-    padding: 3px 10px; font-size: clamp(12px, 1.1vw, 16px); white-space: nowrap; pointer-events: none; transition: opacity .2s; }
+    padding: 2px 10px; font-size: clamp(17px, 1.5vw, 22px); white-space: nowrap; pointer-events: none; transition: opacity .2s; }
   .label::after { content: ""; position: absolute; left: 50%; bottom: -9px; margin-left: -6px; border: 6px solid transparent; border-top-color: var(--k, #e8dcff); }
 
   /* Uitroep bij geschillen */
@@ -110,17 +116,17 @@
   #fout.zicht { display: block; }
   /* Onderzoeksbord (doelen van de Koning) */
   #bord { display: flex; flex-wrap: wrap; gap: 4px; margin: 0 0 8px; }
-  #bord span { font-family: "Courier New", monospace; font-size: 11px; font-weight: 700; padding: 1px 6px; border: 2px solid #7a5428; background: #f4e8c8; }
+  #bord span { font-family: "VT323", monospace; font-size: 15px; font-weight: 400; padding: 1px 6px; border: 2px solid #7a5428; background: #f4e8c8; }
   #bord span.onderbouwd { background: #2f7a3a; color: #fff; border-color: #1f5a2a; }
   #bord span.onbeslist { background: #c07a10; color: #fff; border-color: #8a5208; }
   #bord span.nu { outline: 3px solid #a0300c; }
   /* Bewijskaarten (bronverwijzingen van het Raadslid) */
   #kaarten { position: fixed; right: 18px; top: 118px; width: min(340px, 30vw); max-height: calc(70vh - 130px); overflow: hidden; display: flex; flex-direction: column; gap: 7px; pointer-events: none; }
-  #kaarten .kop { font-family: "Courier New", monospace; font-weight: 700; font-size: 12px; color: #e8dcff; letter-spacing: .06em; text-shadow: 1px 1px 0 #000; }
+  #kaarten .kop { font-family: "VT323", monospace; font-weight: 400; font-size: 17px; color: #e8dcff; letter-spacing: .06em; text-shadow: 1px 1px 0 #000; }
   .kaart { background: #f3e6c4; color: #2e1a0c; border: 3px solid var(--k); box-shadow: 3px 3px 0 #000a; padding: 6px 9px; font-family: Georgia, serif;
     font-size: 13px; line-height: 1.3; text-shadow: none; flex-shrink: 0; transform: translateX(120%); transition: transform .35s cubic-bezier(.2, 1.4, .4, 1); }
   .kaart.in { transform: translateX(0); }
-  .kaart .bk { font-family: "Courier New", monospace; font-size: 11px; color: #5a3a20; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin: 2px 0 3px; }
+  .kaart .bk { font-family: "VT323", monospace; font-size: 15px; color: #5a3a20; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin: 2px 0 3px; }
   .kaart .id { font-family: "Courier New", monospace; font-size: 12px; color: #fff; border-radius: 0; }
   @media (max-width: 900px) { #kaarten { display: none; } }
 
@@ -137,11 +143,19 @@
   #startscherm { position: fixed; inset: 0; z-index: 21; display: grid; place-content: center; gap: 18px; text-align: center; transition: opacity .5s; }
   #startscherm.weg { opacity: 0; pointer-events: none; }
   #startscherm h1 { margin: 0; color: var(--goud); font-size: clamp(30px, 5.5vw, 72px); text-shadow: 5px 5px 0 #000; letter-spacing: .06em; }
-  #startscherm p { margin: 0; color: #f0dcc0; font-size: clamp(14px, 1.4vw, 20px); text-shadow: 2px 2px 0 #000; }
-  #startscherm button { justify-self: center; font: inherit; font-weight: 700; font-size: clamp(16px, 1.6vw, 22px); color: #2e1a0c; background: var(--goud);
+  #startscherm p { margin: 0; color: #f0dcc0; font-size: clamp(20px, 1.9vw, 28px); text-shadow: 2px 2px 0 #000; }
+  #startscherm button { justify-self: center; font: inherit; font-weight: 400; font-size: clamp(24px, 2.2vw, 32px); color: #2e1a0c; background: var(--goud);
     border: 4px solid #fff3c4; outline: 3px solid #3b2412; padding: 10px 26px; cursor: pointer; text-shadow: none; animation: puls 1.4s ease-in-out infinite; }
   @keyframes puls { 50% { transform: scale(1.06); } }
   #startscherm button:hover { animation: none; background: #fff3c4; }
+  /* BEWIJS-stempel bij gecontroleerde citaten */
+  #stempel { position: fixed; right: 90px; top: 190px; z-index: 6; pointer-events: none; padding: 4px 16px 0; border: 5px solid #d8343a;
+    outline: 2px solid #d8343a; outline-offset: 3px; color: #ff5a4a; font-family: "VT323", monospace; font-size: 46px; line-height: .9;
+    text-align: center; letter-spacing: .08em; background: #1a060acc; transform: rotate(-12deg) scale(2.6); opacity: 0; text-shadow: 2px 2px 0 #000; }
+  #stempel small { display: block; font-size: 17px; letter-spacing: .12em; padding-bottom: 4px; }
+  #stempel.zicht { animation: stempel 1.5s ease-out forwards; }
+  @keyframes stempel { 0% { transform: rotate(-12deg) scale(2.6); opacity: 0; } 14% { transform: rotate(-12deg) scale(1); opacity: 1; }
+    80% { transform: rotate(-12deg) scale(1); opacity: 1; } 100% { transform: rotate(-12deg) scale(1); opacity: 0; } }
   #laden { position: fixed; inset: 0; display: grid; place-items: center; font-size: 20px; color: var(--goud); background: var(--diep); }
 </style>
 <script type="importmap">{ "imports": { "three": "/zaal/vendor/three.module.min.js" } }</script>
@@ -171,6 +185,7 @@
 
 <div id="dialoog" class="pixel weg">
   <div id="naambord"></div>
+  <img id="portret" alt="">
   <div id="tekst"></div>
   <div id="sub"></div>
   <div id="pagina"></div>
@@ -178,6 +193,7 @@
 </div>
 
 <div id="uitroep">BEZWAAR!</div>
+<div id="stempel">BEWIJS<small>CITATEN GECONTROLEERD</small></div>
 <div id="finale"><div id="rol"></div></div>
 <div id="gordijn"><div class="doek links"></div><div class="doek rechts"></div><div class="kap"></div></div>
 <div id="startscherm" class="pixel"><h1>RAADSZAAL VAN ACHRONA</h1><p>De Raad komt bijeen om de Desync te ontrafelen</p><button id="k-start">▶ Open de zitting</button><p style="font-size:13px;opacity:.7">klik of druk op Enter · met geluid</p></div>

@@ -347,6 +347,7 @@ function zetActieveRollen(rollen) {
       });
       zetFiguur(rol, { groep: knoop, voorwerp });
     }
+    for (const r of Object.keys(portretten)) delete portretten[r];
   } catch (e) { console.warn("Blender-modellen niet geladen, ik gebruik de tijdelijke figuren.", e); }
 })();
 
@@ -361,6 +362,37 @@ function spotOp(rol) {
   const h = hoofdPos(rol);
   spot.position.set(h.x * 0.75, 7.5, h.z * 0.75); spot.target.position.set(h.x, 1.4, h.z);
   spot.color.set(KLEUR[rol]).lerp(new THREE.Color(0xffffff), 0.55); spotDoel = 60;
+}
+
+// ───────────────────────── Portret in de tekstbox (rechtszaalstijl) ─────────────────────────
+const PORTRET = 96;
+const portretRT = new THREE.WebGLRenderTarget(PORTRET, PORTRET, { minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter });
+const portretCam = new THREE.PerspectiveCamera(28, 1, 0.05, 12);
+const portretten = {};
+const GAMMA = Array.from({ length: 256 }, (_, i) => Math.round(255 * Math.pow(i / 255, 1 / 2.2)));
+function portret(rol) {
+  if (!zetels[rol]?.figuur) return null;
+  if (portretten[rol]) return portretten[rol];
+  try {
+    const z = zetels[rol], h = hoofdPos(rol), naarMidden = new THREE.Vector3(-z.pos.x, 0, -z.pos.z).normalize();
+    const oud = z.figuur.rotation.y; z.figuur.rotation.y = 0; z.figuur.updateMatrixWorld(true);
+    const extra = rol === "koning" ? 0.12 : rol === "archmage" || rol === "beast_master" ? 0.1 : 0.02;   // kroon, punthoed, gewei
+    portretCam.position.copy(h).addScaledVector(naarMidden, 1.5).add(new THREE.Vector3(0, 0.12 + extra, 0));
+    portretCam.lookAt(h.x, h.y + extra, h.z);
+    const spotOud = spot.intensity; spot.intensity = 0;
+    renderer.setRenderTarget(portretRT); renderer.render(scene, portretCam); renderer.setRenderTarget(null);
+    spot.intensity = spotOud; z.figuur.rotation.y = oud;
+    const px = new Uint8Array(PORTRET * PORTRET * 4); renderer.readRenderTargetPixels(portretRT, 0, 0, PORTRET, PORTRET, px);
+    const c = document.createElement("canvas"); c.width = c.height = PORTRET;
+    const g = c.getContext("2d"), beeld = g.createImageData(PORTRET, PORTRET);
+    for (let y = 0; y < PORTRET; y++) for (let x = 0; x < PORTRET; x++) {
+      const bron = ((PORTRET - 1 - y) * PORTRET + x) * 4, doel = (y * PORTRET + x) * 4;   // WebGL leest ondersteboven
+      for (let k = 0; k < 3; k++) beeld.data[doel + k] = GAMMA[px[bron + k]];
+      beeld.data[doel + 3] = 255;
+    }
+    g.putImageData(beeld, 0, 0);
+    return (portretten[rol] = c.toDataURL());
+  } catch (e) { console.warn("Portret mislukt", e); return null; }
 }
 
 // ───────────────────────── Bewijs op tafel: per Rol een groeiende stapel perkamentjes ─────────────────────────
@@ -584,6 +616,7 @@ function toonDialoog(rol, naambord, tekst, sub = "", pagina = "", klasse = "") {
   const d = $("dialoog"); d.classList.remove("weg");
   $("naambord").innerHTML = naambord; d.style.setProperty("--kleur", KLEUR[rol] || "#6a52a8");
   $("naambord").style.background = KLEUR[rol] || "#6a52a8";
+  const beeld = portret(rol); if (beeld) $("portret").src = beeld; else $("portret").removeAttribute("src");
   $("sub").innerHTML = sub; $("sub").classList.remove("zicht"); $("verder").classList.remove("zicht");
   $("pagina").textContent = pagina;
   dlg.units = units(tekst); dlg.totaal = dlg.units.length; dlg.getoond = 0; dlg.rol = rol; dlg.laatst = -1;
@@ -712,6 +745,10 @@ function toonKaarten(rol, verwijzingen, controle) {
   if (verwijzingen.length > 3) { const m = document.createElement("div"); m.className = "kop"; m.textContent = `+${verwijzingen.length - 3} meer bronnen in de debatviewer`; doos.appendChild(m); }
 }
 function verbergKaarten() { $("kaarten").innerHTML = ""; }
+function stempel() {
+  const s = $("stempel"); s.classList.remove("zicht"); void s.offsetWidth; s.classList.add("zicht");
+  setTimeout(() => { toon(90, 0, 0.3, "sine", 0.18); toon(180, 0, 0.12, "square", 0.04); }, 200);
+}
 
 // Geschillen zijn momentopnames: elk geschil (op onderwerp) speelt maar één keer.
 const gezien = new Set();
@@ -768,7 +805,10 @@ async function speelBericht(b) {
   let tekst = typeof b.antwoord === "string" && b.antwoord.trim() ? b.antwoord : String(b.tekst ?? "");
   if (rol === "koning" && isVerdictJson(tekst)) tekst = "De Raad heeft genoeg gehoord. Ik schrijf het Verdict neer.";
   // Bronverwijzingen worden bewijskaarten; zonder dat veld knippen we een oud blok "Broncitaten" weg.
-  if (Array.isArray(b.bronverwijzingen) && b.bronverwijzingen.length) toonKaarten(rol, b.bronverwijzingen, b.citaatcontrole);
+  if (Array.isArray(b.bronverwijzingen) && b.bronverwijzingen.length) {
+    toonKaarten(rol, b.bronverwijzingen, b.citaatcontrole);
+    if (b.citaatcontrole === "geslaagd") setTimeout(stempel, 700 / speler.tempo);
+  }
   else {
     const knip = tekst.search(/\n\s*[*#]*\s*Broncitaten\s*[*]*\s*:?/i);
     if (knip >= 0) { const n = (tekst.slice(knip).match(/^\s*[-•]\s/gm) || []).length; if (n && zetels[rol]) label(rol, `📜 ${n} broncitaten`, 2600); tekst = tekst.slice(0, knip); }
