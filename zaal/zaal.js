@@ -14,7 +14,7 @@ const BEURTENBUDGET = 10;
 const LAAG = 240;             // PS1: de scène wordt op 240 pixels hoog getekend
 const STOEL_R = 4.3;          // straal waarop de stoelen staan
 const TAFEL_Y = 1.25;         // hoogte van het tafelblad
-const TYP_SNELHEID = 70;      // tekens per seconde bij 1×
+const TYP_SNELHEID = 140;     // tekens per seconde bij 1×
 const AFGEBROKEN = Symbol("afgebroken");
 const params = new URLSearchParams(location.search);   // ?tempo=4  ·  ?zonderintro (live meekijken zonder gordijn)
 
@@ -661,7 +661,15 @@ function paginas(tekst, max = 230) {
   return uit.length ? uit : [""];
 }
 const kleineLetter = t => /^[A-Z][a-z]/.test(t) ? t[0].toLowerCase() + t.slice(1) : t;
-const leestijd = tekst => 700 + tekst.length * 14;
+const leestijd = tekst => 450 + tekst.length * 7;
+// Kort-modus (standaard): lange getuigenissen ingekort zodat het debat vlot loopt; de debatviewer toont alles.
+let kort = !params.has("volledig");
+const MAX_PAG = { bericht: 3, vraag: 1, reden: 1 };
+function inkorten(pag, max) {
+  if (!kort || pag.length <= max) return pag;
+  const uit = pag.slice(0, max); uit[max - 1] = uit[max - 1].replace(/[\s.…]*$/, "") + " …";
+  return uit;
+}
 
 // ───────────────────────── Open vragen (briefje) ─────────────────────────
 let vorigeVragen = null;
@@ -731,7 +739,7 @@ async function speelRoutering(b) {
   if (b.aan && zetels[b.aan]) zetels[b.aan].gloed = 1;
   const vraag = b.aan ? `${naam(b.aan)}, ${kleineLetter(b.vraag || "spreek.")}` : "Genoeg. De Raad heeft gesproken: het debat is gesloten.";
   const reden = b.aan ? `Waarom ${naam(b.aan)}? ${b.reden || ""}${b.reden === "vaste volgorde" ? " (de Koning kiest nog niet zelf)" : ""}` : `Waarom nu? ${b.reden || ""}`;
-  const stukken = [...paginas(vraag).map(t => [t, ""]), ...paginas(reden).map(t => [t, "reden"])];
+  const stukken = [...inkorten(paginas(vraag), MAX_PAG.vraag).map(t => [t, ""]), ...inkorten(paginas(reden), MAX_PAG.reden).map(t => [t, "reden"])];
   for (let k = 0; k < stukken.length; k++) {
     await toonDialoog("koning", bord, stukken[k][0], "", stukken.length > 1 ? `${k + 1}/${stukken.length}` : "", stukken[k][1]);
     if (controleer(sprong)) return;
@@ -749,8 +757,8 @@ async function speelTool(b) {
   if (cam.modus !== "half" || speler.huidigeSpreker !== rol) { shot("half", rol); spotOp(rol); }
   speler.huidigeSpreker = rol;
   if (zetels[rol]) zetels[rol].gloed = 1;
-  label(rol, toolTekst(b), 1500);
-  await wacht(1300); if (controleer(sprong)) return;
+  label(rol, toolTekst(b), 1100);
+  await wacht(900); if (controleer(sprong)) return;
 }
 
 async function speelBericht(b) {
@@ -765,9 +773,10 @@ async function speelBericht(b) {
     const knip = tekst.search(/\n\s*[*#]*\s*Broncitaten\s*[*]*\s*:?/i);
     if (knip >= 0) { const n = (tekst.slice(knip).match(/^\s*[-•]\s/gm) || []).length; if (n && zetels[rol]) label(rol, `📜 ${n} broncitaten`, 2600); tekst = tekst.slice(0, knip); }
   }
-  const pag = paginas(schoon(tekst));
+  const alles = paginas(schoon(tekst)), pag = inkorten(alles, MAX_PAG.bericht);
+  const extra = alles.length > pag.length ? ` · ingekort, volledig in de debatviewer` : "";
   for (let k = 0; k < pag.length; k++) {
-    await toonDialoog(rol, esc(naam(rol)), pag[k], "", pag.length > 1 ? `${k + 1}/${pag.length}` : "");
+    await toonDialoog(rol, esc(naam(rol)), pag[k], "", (pag.length > 1 ? `${k + 1}/${pag.length}` : "") + (k === pag.length - 1 ? extra : ""));
     if (controleer(sprong)) break;
     await wacht(leestijd(pag[k]), true); if (controleer(sprong)) break;
   }
@@ -947,6 +956,8 @@ $("k-opnieuw").onclick = () => { herstart(); if (!params.has("zonderintro")) slu
 $("k-start").onclick = e => { e.stopPropagation(); startIntro(); };
 $("k-pauze").onclick = () => { speler.pauze = !speler.pauze; $("k-pauze").textContent = speler.pauze ? "▶" : "⏸"; $("k-pauze").classList.toggle("aan", speler.pauze); };
 $("k-volgende").onclick = () => { if (!intro.klaar) return eindigIntro(); volgende(); };
+$("k-kort").textContent = kort ? "Kort" : "Volledig"; $("k-kort").classList.toggle("aan", kort);
+$("k-kort").onclick = () => { kort = !kort; $("k-kort").textContent = kort ? "Kort" : "Volledig"; $("k-kort").classList.toggle("aan", kort); };
 $("k-tempo").onclick = () => { speler.tempo = speler.tempo >= 4 ? 1 : speler.tempo * 2; $("k-tempo").textContent = speler.tempo + "×"; };
 $("k-live").onclick = () => naarLive();
 $("k-geluid").onclick = () => zetGeluid(!geluid.aan);
