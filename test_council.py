@@ -17,13 +17,45 @@ from validate import spelregels
 from council import bewijscatalogus, controleer_eindrapport, controleer_routering, kies_volgende, lees_json
 
 
+def onderzoekskeuze(rol="engineer", doel="ingreep"):
+    onderzoek = council.leeg_onderzoek()
+    for d, stand in onderzoek.items():
+        stand.update(volgende_vraag=f"Welke bevinding helpt bij {d}?", rol=rol)
+    return {"rol": rol, "vraag": "Welke waarneming kan een oorzaak toetsen?",
+            "reden": "We missen een onafhankelijk perspectief.", "doel": doel,
+            "open_vragen": ["Welk mechanisme verklaart de symptomen?"],
+            "onderzoek": onderzoek, "geschillen": []}
+
+
+def afgerond_onderzoek():
+    rollen = ["engineer", "oracle", "historian"]
+    beurten = []
+    onderzoek = council.leeg_onderzoek()
+    keuzes = []
+    for i, doel in enumerate(council.DOELEN):
+        rol = rollen[i % len(rollen)]
+        keuze = onderzoekskeuze(rol, doel)
+        for d in council.DOELEN:
+            if onderzoek[d]["status"] == "onderbouwd":
+                keuze["onderzoek"][d] = dict(onderzoek[d])
+        keuzes.append(keuze)
+        beurten.append({"soort": "routering", "spreker": "koning", "aan": rol, "doel": doel, "nr": len(beurten)+1})
+        bewijs = council.PREFIX_PER_ROL[rol] + "-" + "001"
+        beurten.append({"soort": "bericht", "spreker": rol, "tekst": f"Eigen waarneming: {bewijs}",
+                       "nr": len(beurten)+1})
+        onderzoek[doel] = {"status": "onderbouwd", "samenvatting": "Getoetste hypothese.", "bewijs": [bewijs],
+                           "volgende_vraag": None, "rol": None, "blokkade": None}
+    stop = {"rol": None, "vraag": None, "reden": "De vijf doelen zijn behandeld en onderbouwd.",
+            "doel": None, "open_vragen": [], "onderzoek": onderzoek, "geschillen": []}
+    keuzes.append(stop)
+    return beurten, keuzes
+
+
 class RouteringTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.rollen = ["engineer", "oracle", "historian"]
         self.leden = [SimpleNamespace(ROL=r, PERSPECTIEF=f"Perspectief van {r}") for r in self.rollen]
-        self.keuze = {"rol": "engineer", "vraag": "Welke waarneming kan een oorzaak toetsen?",
-                      "reden": "We missen een onafhankelijk perspectief.",
-                      "open_vragen": ["Welk mechanisme verklaart de symptomen?"]}
+        self.keuze = onderzoekskeuze()
 
     def response(self, keuze):
         return SimpleNamespace(text=json.dumps(keuze), usage_details={"input_token_count": 10})
@@ -41,10 +73,60 @@ class RouteringTests(unittest.IsolatedAsyncioTestCase):
                 controleer_routering({**self.keuze, "vraag": vraag}, self.rollen, [])
 
     def test_stop_vereist_verschillende_perspectieven(self):
-        stop = {**self.keuze, "rol": None, "vraag": None}
+        beurten, keuzes = afgerond_onderzoek()
+        stop = keuzes[-1]
         with self.assertRaises(ValueError):
-            controleer_routering(stop, self.rollen, ["oracle", "oracle", "engineer"])
-        self.assertEqual(controleer_routering(stop, self.rollen, self.rollen), stop)
+            controleer_routering(stop, self.rollen, ["oracle", "oracle", "engineer"], beurten)
+        self.assertEqual(controleer_routering(stop, self.rollen, self.rollen, beurten), stop)
+
+    def test_regressie_stoppen_met_uitvoerbare_mechanismevraag_wordt_geweigerd(self):
+        beurten, keuzes = afgerond_onderzoek()
+        stop = keuzes[-1]
+        stop["onderzoek"]["mechanisme"] = self.keuze["onderzoek"]["mechanisme"]
+        with self.assertRaisesRegex(ValueError, "Stoppen is voorbarig"):
+            controleer_routering(stop, self.rollen, self.rollen, beurten)
+
+    def test_onbeslist_vereist_gerichte_toetsing_bij_twee_rollen(self):
+        beurten, keuzes = afgerond_onderzoek()
+        stop = keuzes[-1]
+        stop["onderzoek"]["mechanisme"].update(status="onbeslist", blokkade="Niet vast te stellen.")
+        with self.assertRaisesRegex(ValueError, "twee verschillende Rollen"):
+            controleer_routering(stop, self.rollen, self.rollen, beurten)
+        beurten.extend([
+            {"soort": "routering", "spreker": "koning", "aan": "historian", "doel": "mechanisme"},
+            {"soort": "bericht", "spreker": "historian", "tekst": "Dit mechanisme kan ik niet vaststellen."},
+        ])
+        self.assertEqual(controleer_routering(stop, self.rollen, self.rollen, beurten), stop)
+
+    def test_doelverdeling_reserveert_ruime_voor_ontbrekende_onderwerpen(self):
+        beurten = []
+        for _ in range(6):
+            beurten.extend([
+                {"soort": "routering", "spreker": "koning", "aan": "engineer", "doel": "ingreep"},
+                {"soort": "bericht", "spreker": "engineer", "tekst": "Nog een tijdlijnwaarneming."},
+            ])
+        kandidaat = {**self.keuze, "rol": "oracle"}
+        with self.assertRaisesRegex(ValueError, "nog niet behandeld doel"):
+            controleer_routering(kandidaat, self.rollen, ["engineer"] * 6, beurten)
+        keuze = {**kandidaat, "doel": "mechanisme"}
+        self.assertEqual(controleer_routering(keuze, self.rollen, ["engineer"] * 6, beurten), keuze)
+
+    def test_router_mag_geen_bewijs_uit_het_niets_toevoegen(self):
+        self.keuze["onderzoek"]["ingreep"]["bewijs"] = ["ENG-" + "999"]
+        with self.assertRaisesRegex(ValueError, "eigen Rol"):
+            controleer_routering(self.keuze, self.rollen, [])
+
+    def test_geen_derde_vergelijkbare_vraag_aan_dezelfde_rol(self):
+        beurten = []
+        for _ in range(2):
+            beurten.extend([
+                {"soort": "routering", "spreker": "koning", "aan": "engineer", "doel": "ingreep"},
+                {"soort": "bericht", "spreker": "engineer", "tekst": "Mijn bron heeft geen aanvullende tijdmeting."},
+            ])
+        with self.assertRaisesRegex(ValueError, "al twee vragen"):
+            controleer_routering(self.keuze, self.rollen, ["engineer"] * 2, beurten)
+        keuze = {**self.keuze, "doel": "herstel"}
+        self.assertEqual(controleer_routering(keuze, self.rollen, ["engineer"] * 2, beurten), keuze)
 
     async def test_ongeldige_keuze_wordt_hersteld_en_verbruik_geteld(self):
         koning = SimpleNamespace(run=AsyncMock(side_effect=[
@@ -82,6 +164,16 @@ class RouteringTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("GEHEIME TOOLINHOUD", prompt)
         self.assertNotIn("OUDE SAMENVATTING", prompt)
         self.assertIn("Publieke getuigenis", prompt)
+        self.assertNotIn("antwoord_schema", json.loads(prompt))
+
+    async def test_verdict_is_onafhankelijk_van_routerconclusies(self):
+        fixture = VerdictTests()
+        fixture.setUp()
+        koning = SimpleNamespace(run=AsyncMock(return_value=self.response(fixture.rapport)))
+        beurten = [*fixture.beurten,
+                   {"soort": "routering", "spreker": "koning", "onderzoek": "ONDERZOEK_IS_GEEN_BEWIJS"}]
+        await council.maak_verdict(beurten, koning, None, {}, "test-run")
+        self.assertNotIn("ONDERZOEK_IS_GEEN_BEWIJS", koning.run.call_args.args[0])
 
 
 class VerdictTests(unittest.TestCase):
@@ -94,9 +186,9 @@ class VerdictTests(unittest.TestCase):
         self.rapport = {
             "verdict": {
                 "samenvatting": "Onvoldoende onafhankelijke bronnen voor een definitieve oorzaak.",
-                "oorzaak": {naam: {"bewering": None, "bewijs": [], "zekerheid": 0}
+                "oorzaak": {naam: {"bewering": None, "bewijs": [], "zekerheid": 0, "redenering": "Dit deel is nog onbekend."}
                             for naam in ("ingreep", "mechanisme", "verloop")},
-                "acties": [{"actie": "Verzamel onafhankelijk bewijs.", "reden": "De oorzaak is onzeker."}],
+                "acties": [{"actie": "Verzamel onafhankelijk bewijs.", "reden": "De oorzaak is onzeker.", "succescriterium": "Een onafhankelijk getoetste verklaring."}],
                 "risicos": [{"risico": "Overhaast ingrijpen.", "mitigatie": "Toets eerst de hypothese."}],
             },
             "geschillen": [],
@@ -105,14 +197,14 @@ class VerdictTests(unittest.TestCase):
     def test_andermans_id_herhalen_maakt_het_geen_eigen_bewijs(self):
         self.assertEqual(bewijscatalogus(self.beurten), {self.eigen_id: "engineer"})
         self.rapport["verdict"]["oorzaak"]["ingreep"] = {
-            "bewering": "Een hypothese", "bewijs": [self.vreemd_id], "zekerheid": 0.5}
+            "bewering": "Een hypothese", "bewijs": [self.vreemd_id], "zekerheid": 0.5, "redenering": "Een te toetsen afleiding."}
         with self.assertRaisesRegex(ValueError, "eigen Rol"):
             controleer_eindrapport(self.rapport, self.beurten, "test-run")
 
     def test_verdict_krijgt_juiste_run_id_en_normaliseert_zonder_trace_te_wijzigen(self):
         origineel = json.dumps(self.beurten)
         self.rapport["verdict"]["oorzaak"]["ingreep"] = {
-            "bewering": "Een hypothese", "bewijs": [self.eigen_id.replace("-", "\u2011")], "zekerheid": 0.5}
+            "bewering": "Een hypothese", "bewijs": [self.eigen_id.replace("-", "\u2011")], "zekerheid": 0.5, "redenering": "Een te toetsen afleiding."}
         resultaat = controleer_eindrapport(self.rapport, self.beurten, "test-run")
         self.assertEqual(resultaat["verdict"]["run_id"], "test-run")
         self.assertEqual(resultaat["verdict"]["oorzaak"]["ingreep"]["bewijs"], [self.eigen_id])
@@ -135,16 +227,44 @@ class VerdictTests(unittest.TestCase):
         with self.assertRaises(ValidationError):
             controleer_eindrapport(self.rapport, self.beurten, "test-run")
 
+    def test_geen_standpunt_is_geen_geschil(self):
+        self.beurten.append({"soort": "bericht", "spreker": "oracle", "tekst": "Ik kan die andere bron niet lezen."})
+        self.rapport["geschillen"] = [{"onderwerp": "Toegang tot de bron",
+                                      "standpunten": {"engineer": "Mijn bron bevat een waarneming.",
+                                                      "oracle": "Geen standpunt; ik kan de bron niet lezen."},
+                                      "uitkomst": None, "bewijs": []}]
+        with self.assertRaisesRegex(ValueError, "geen botsend standpunt"):
+            controleer_eindrapport(self.rapport, self.beurten, "test-run")
+
+    def test_een_enkel_standpunt_is_geen_geschil(self):
+        self.rapport["geschillen"] = [{"onderwerp": "Een interpretatie",
+                                      "standpunten": {"engineer": "Mijn verklaring is onzeker."},
+                                      "uitkomst": None, "bewijs": []}]
+        with self.assertRaisesRegex(ValueError, "minstens twee"):
+            controleer_eindrapport(self.rapport, self.beurten, "test-run")
+
+    def test_herstelactie_vereist_een_succescriterium(self):
+        self.rapport["verdict"]["acties"][0].pop("succescriterium")
+        with self.assertRaises(ValidationError):
+            controleer_eindrapport(self.rapport, self.beurten, "test-run")
+
+    def test_voorspelling_moet_rekenkundig_kloppen(self):
+        self.rapport["verdict"]["voorspelling"] = {
+            "dag": 12, "laatste_waargenomen_dag": 9, "interval_dagen": 2,
+            "bewering": "De waargenomen periode blijft mogelijk bestaan.", "bewijs": [self.eigen_id]}
+        with self.assertRaisesRegex(ValueError, "laatste_waargenomen_dag"):
+            controleer_eindrapport(self.rapport, self.beurten, "test-run")
+        self.rapport["verdict"]["voorspelling"]["dag"] = 11
+        resultaat = controleer_eindrapport(self.rapport, self.beurten, "test-run")
+        self.assertEqual(resultaat["verdict"]["voorspelling"]["dag"], 11)
+
 
 class VolledigeRunTests(unittest.IsolatedAsyncioTestCase):
     async def test_run_schrijft_geldig_verdict_en_ongewijzigde_getuigenissen(self):
         rollen = ["engineer", "oracle", "historian"]
         leden = [SimpleNamespace(ROL=r, NAAM=r, PERSPECTIEF=f"Perspectief {r}") for r in rollen]
         stemmen = {r: f"Eigen waarneming: {council.PREFIX_PER_ROL[r]}-" + "001" for r in rollen}
-        keuzes = [{"rol": r, "vraag": "Welke eigen waarneming is relevant?", "reden": "Ontbrekend perspectief.",
-                   "open_vragen": ["Wat is de oorzaak?"]} for r in rollen]
-        keuzes.append({"rol": None, "vraag": None, "reden": "Verdere beurten leveren nu geen nieuw bewijs.",
-                       "open_vragen": ["Wat is de oorzaak?"]})
+        _, keuzes = afgerond_onderzoek()
         rapport = VerdictTests()
         rapport.setUp()
 

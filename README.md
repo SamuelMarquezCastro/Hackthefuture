@@ -9,6 +9,9 @@ Deze kit geeft jullie binnen het eerste halfuur een draaiende mini-Council die j
 **Onze teamversie:** de Koning kiest nu met `MODEL_GROOT` per beurt de Rol, onderzoeksvraag,
 reden en open vragen. Hij kan zelfstandig stoppen. Het eindverdict en de geschillen worden
 als JSON gegenereerd en gecontroleerd op schema en bewijsverwijzingen uit het debat.
+De Koning houdt vijf onderzoeksdoelen bij en mag niet stoppen met een uitvoerbare open vraag.
+Ieder Raadslid leest zijn volledige eigen MCP-bron eenmaal per beurt; herhaald bronzoeken is beperkt.
+De publieke belangen uit de rolkaarten blijven zichtbaar in de afwegingen van de Rollen.
 De oorspronkelijke challenge-instructies hieronder blijven het uitgangspunt.
 Tests zonder API-verbruik: `uv run python -m unittest -v`.
 
@@ -105,9 +108,44 @@ Viewer op een andere poort: zet `VIEWER_PORT=8101` als omgevingsvariabele. Een a
 
 ## De Koning leidt het debat
 
-`await kies_volgende(beurten, leden, koning, opties, verbruik)` in `council.py` beslist voor elke beurt wie spreekt. De Koning krijgt de publieke perspectieven, de Raadslid-berichten en eerdere routeringen, zonder bronbestanden of toolresultaten. Hij geeft een JSON-object met `rol`, `vraag`, `reden` en `open_vragen` terug; `rol: null` betekent stoppen. De code schrijft de keuze als `routering` in de trace en stopt altijd na maximaal tien Raadslid-beurten.
+`await kies_volgende(beurten, leden, koning, opties, verbruik)` in `council.py` beslist voor elke beurt wie spreekt. De Koning krijgt de publieke perspectieven, de Raadslid-berichten en eerdere onderzoeksvragen, zonder bronbestanden of toolresultaten. Hij geeft een JSON-object met `rol`, `vraag`, `reden`, `doel`, `open_vragen`, `onderzoek` en `geschillen` terug; `rol: null` betekent stoppen. De code schrijft de keuze als `routering` in de trace en stopt altijd na maximaal tien Raadslid-beurten.
 
 De vaste volgorde is vervangen door `ROUTER_INSTRUCTIES`. Die sturen op ontbrekende perspectieven, tegenbewijs en informatiewinst. Een ongeldige JSON-keuze krijgt één herstelpoging; de code valt niet stilzwijgend terug op een vaste volgorde. Het verdict wordt apart gemaakt met `VERDICT_INSTRUCTIES`. Bewijs-ID's zijn alleen toegestaan als de bijbehorende Rol ze zelf in het debat heeft genoemd. Deze controle bewijst niet dat de bron correct is gelezen of de conclusie klopt: beoordeel dat in de viewer.
+
+### Onderzoek en viewerdata
+
+De bestaande tracevelden blijven beschikbaar. Elke routering heeft daarnaast `doel` en
+`onderzoek`. `doel` is `ingreep`, `mechanisme`, `verloop`, `herstel` of `risicos`; bij stoppen
+is het null. `onderzoek` bevat voor ieder doel `status`, `samenvatting`, `bewijs`,
+`volgende_vraag`, `rol` en `blokkade`.
+
+- `open`: een uitvoerbare vervolgvraag en beschikbare Rol zijn verplicht.
+- `onderbouwd`: een conclusie met bewijs uit het debat; geen garantie van absolute zekerheid.
+- `onbeslist`: een expliciete blokkade na gerichte vragen aan twee verschillende Rollen.
+
+Voor zelfstandig stoppen moeten alle doelen behandeld zijn en mag geen doel open zijn.
+De code reserveert de laatste beschikbare beurten voor nog niet behandelde doelen.
+Een derde vraag aan dezelfde Rol over hetzelfde doel wordt geweigerd.
+De onderzoeksstatus staat ook bovenaan `trace.json`; snapshots blijven per routering bewaard.
+Deze status beoordeelt de antwoorden tot aan die routering. Bij een verplichte budgetstop kan
+het laatste antwoord dus nog ontbreken in de status; de verdictgenerator beoordeelt wel het hele debat.
+`geschillen` wordt tijdens het debat bijgewerkt en bij het eindverdict opnieuw beoordeeld.
+Bronafscherming of 'geen standpunt' telt niet als botsend standpunt.
+
+De eindsynthese beoordeelt het publieke debat onafhankelijk van de eerdere routerlabels.
+Ieder oorzaakdeel heeft extra `redenering`; iedere herstelactie een `succescriterium`.
+Een voorspelling heeft naast de oorspronkelijke velden `laatste_waargenomen_dag` en
+`interval_dagen`. De code controleert dat `dag` hun som is. Deze extra velden passen binnen
+het oorspronkelijke juryschema. Hun inhoud vraagt nog steeds menselijke beoordeling.
+
+Voor de sprekerkeuze kan apart `ROUTER_REASONING=low` in `.env` worden gezet; dit is getest
+op het Roboest-endpoint. De eindconclusie en de Raadsleden behouden hun eigen standaardinstelling
+of de algemene `REASONING`-instelling. Zonder deze extra instelling wordt niets overschreven.
+
+De MCP-route biedt ieder Raadslid alleen `lees_kennisbron` aan. Het framework begrenst de
+tooluitvoering na één bronlezing en vraagt daarna een tekstantwoord. Een MCP-bericht zonder
+broncall wordt geweigerd. De Koning krijgt geen van deze tools of ruwe toolresultaten.
+Bij een mislukte modelaanvraag of ongeldige uitvoer wordt de run als `fout` gemarkeerd.
 
 ### Na je eerste run: waar kijk je naar?
 
