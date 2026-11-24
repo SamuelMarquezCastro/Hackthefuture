@@ -4,3 +4,8 @@ __pycache__/
 *.egg-info/
 *.log
 kennisbronnen/*/
+.DS_Store
+pack.zip
+council-of-achrona-pack.zip
+trace.json.tmp
+verdict.json.tmp

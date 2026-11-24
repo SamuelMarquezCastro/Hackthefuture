@@ -65,6 +65,12 @@ class RouteringTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(ValueError):
             lees_json("Geen JSON")
 
+    def test_verkeerd_ge_escapete_quotes_blijven_in_het_buitenste_object(self):
+        payload = {"antwoord": 'Een "letterlijk citaat" blijft behouden.',
+                   "bronverwijzingen": [{"id": "ENG-" + "001", "citaat": 'Een "letterlijk citaat".'}]}
+        ongeldig = json.dumps(payload).replace(r'\"', r'\\"')
+        self.assertEqual(lees_json(ongeldig), payload)
+
     def test_onbekende_rol_en_lege_vraag_worden_geweigerd(self):
         with self.assertRaises(ValidationError):
             controleer_routering({**self.keuze, "rol": "onbekend"}, self.rollen, [])
@@ -86,12 +92,11 @@ class RouteringTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaisesRegex(ValueError, "Stoppen is voorbarig"):
             controleer_routering(stop, self.rollen, self.rollen, beurten)
 
-    def test_onbeslist_vereist_gerichte_toetsing_bij_twee_rollen(self):
+    def test_onbeslist_kan_ook_steunen_op_antwoorden_met_een_ander_doellabel(self):
         beurten, keuzes = afgerond_onderzoek()
         stop = keuzes[-1]
         stop["onderzoek"]["mechanisme"].update(status="onbeslist", blokkade="Niet vast te stellen.")
-        with self.assertRaisesRegex(ValueError, "twee verschillende Rollen"):
-            controleer_routering(stop, self.rollen, self.rollen, beurten)
+        self.assertEqual(controleer_routering(stop, self.rollen, self.rollen, beurten), stop)
         beurten.extend([
             {"soort": "routering", "spreker": "koning", "aan": "historian", "doel": "mechanisme"},
             {"soort": "bericht", "spreker": "historian", "tekst": "Dit mechanisme kan ik niet vaststellen."},
@@ -126,7 +131,13 @@ class RouteringTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaisesRegex(ValueError, "al twee vragen"):
             controleer_routering(self.keuze, self.rollen, ["engineer"] * 2, beurten)
         keuze = {**self.keuze, "doel": "herstel"}
-        self.assertEqual(controleer_routering(keuze, self.rollen, ["engineer"] * 2, beurten), keuze)
+        gehoord = ["engineer", "engineer", "oracle", "historian"]
+        self.assertEqual(controleer_routering(keuze, self.rollen, gehoord, beurten), keuze)
+
+    def test_nieuwe_perspectieven_gaan_voor_een_derde_beurt(self):
+        keuze = {**self.keuze, "doel": "herstel"}
+        with self.assertRaisesRegex(ValueError, "nog niet gesproken perspectief"):
+            controleer_routering(keuze, self.rollen, ["engineer", "engineer"])
 
     async def test_ongeldige_keuze_wordt_hersteld_en_verbruik_geteld(self):
         koning = SimpleNamespace(run=AsyncMock(side_effect=[
@@ -143,14 +154,21 @@ class RouteringTests(unittest.IsolatedAsyncioTestCase):
             await kies_volgende([], self.leden, koning, None, {})
         self.assertEqual(koning.run.await_count, 2)
 
-    async def test_budget_stopt_zonder_modelcall_en_bewaart_open_vragen(self):
-        koning = SimpleNamespace(run=AsyncMock())
-        beurten = [{"soort": "routering", "open_vragen": ["Onbeantwoord"]}]
+    async def test_budget_stopt_en_verwerkt_ook_de_laatste_getuigenis(self):
+        stop = {**self.keuze, "rol": None, "vraag": None, "doel": None, "open_vragen": ["Nieuwe onzekerheid"]}
+        koning = SimpleNamespace(run=AsyncMock(return_value=self.response(stop)))
+        beurten = [{"soort": "routering", "spreker": "koning", "aan": "engineer", "open_vragen": ["Oude vraag"]}]
         beurten += [{"soort": "bericht", "spreker": self.rollen[i % 3], "tekst": "Getuigenis"} for i in range(10)]
+        beurten[-1]["tekst"] = "LAATSTE GETUIGENIS"
         keuze = await kies_volgende(beurten, self.leden, koning, None, {})
         self.assertIsNone(keuze["rol"])
-        self.assertEqual(keuze["open_vragen"], ["Onbeantwoord"])
-        koning.run.assert_not_awaited()
+        self.assertEqual(keuze["open_vragen"], ["Nieuwe onzekerheid"])
+        self.assertIn("Beurtenbudget op", keuze["reden"])
+        self.assertIn("LAATSTE GETUIGENIS", koning.run.call_args.args[0])
+
+    def test_budget_staat_geen_elfde_spreekbeurt_toe(self):
+        with self.assertRaisesRegex(ValueError, "beurtenbudget is op"):
+            controleer_routering(self.keuze, self.rollen, self.rollen * 3 + ["engineer"])
 
     async def test_koning_krijgt_geen_toolinhoud_of_eerdere_eindsamenvatting(self):
         koning = SimpleNamespace(run=AsyncMock(return_value=self.response(self.keuze)))
@@ -276,7 +294,9 @@ class VolledigeRunTests(unittest.IsolatedAsyncioTestCase):
                 return SimpleNamespace(run=AsyncMock(side_effect=[response(json.dumps(k)) for k in keuzes]))
             if name == "koning":
                 return SimpleNamespace(run=AsyncMock(return_value=response(json.dumps(rapport.rapport))))
-            return SimpleNamespace(run=AsyncMock(return_value=response(stemmen[name])))
+            bewijs = council.PREFIX_PER_ROL[name] + "-" + "001"
+            antwoord = {"antwoord": stemmen[name], "bronverwijzingen": [{"id": bewijs, "citaat": stemmen[name]}]}
+            return SimpleNamespace(run=AsyncMock(return_value=response(json.dumps(antwoord))))
 
         with tempfile.TemporaryDirectory() as tijdelijke_map:
             root = Path(tijdelijke_map)
@@ -284,7 +304,8 @@ class VolledigeRunTests(unittest.IsolatedAsyncioTestCase):
             for r in rollen:
                 bron = root / "kennisbronnen" / r
                 bron.mkdir(parents=True)
-                (bron / "test.md").write_text(stemmen[r], encoding="utf-8")
+                bewijs = council.PREFIX_PER_ROL[r] + "-" + "001"
+                (bron / "test.md").write_text(f"[{bewijs}]\n{stemmen[r]}", encoding="utf-8")
             env = {"OPENAI_BASE_URL": "https://example.invalid/v1", "OPENAI_API_KEY": "test",
                    "MODEL_KLEIN": "test", "MODEL_GROOT": "test", **{f"MCP_{r.upper()}": "" for r in council.ROLLEN}}
             with patch.object(council, "ROOT", root), patch.object(council, "KENNISBRONNEN", root / "kennisbronnen"), \
@@ -300,7 +321,9 @@ class VolledigeRunTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(spelregels(trace), [])
             berichten = {b["spreker"]: b["tekst"] for b in trace["beurten"]
                          if b["soort"] == "bericht" and b["spreker"] in rollen}
-            self.assertEqual(berichten, stemmen)
+            self.assertEqual({r: tekst.split("\n\nBroncitaten:\n")[0] for r, tekst in berichten.items()}, stemmen)
+            self.assertTrue(all(b.get("citaatcontrole") == "geslaagd" for b in trace["beurten"]
+                                if b["soort"] == "bericht" and b["spreker"] in rollen))
             self.assertEqual({b["spreker"] for b in trace["beurten"] if b["soort"] == "bestand"}, set(rollen))
 
 

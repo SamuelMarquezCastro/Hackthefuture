@@ -9,6 +9,7 @@ dependencies = [
     "mcp>=1.30,<2",
     "python-dotenv>=1.0",
     "jsonschema>=4.23",
+    "json-repair>=0.64,<1",
 ]
 
 [project.optional-dependencies]

@@ -1,0 +1,159 @@
+{
+  "run_id": "2026-11-24T11:59:34+01:00_d696f0c3",
+  "samenvatting": "Op dag 10 om 02:40 is de hulpslag als eigen pols voor het datanet geactiveerd, los van de Kroonklok. Daarna meldt de benedenstad 'half aangekomen' berichten (04:50). Op dag 10, 14, 22, 38 en 42 zijn er nachtelijke verstoringen in het venster 04:15-04:50, met stokkingen van de Burchtader, openingen van binnenuit en onrust bij dieren, die elke vierde nacht terugkeren. Het mechanisme is niet bewezen: er is geen kloksmeting of verliesmeting. De fijnregeling (dag 12) en de versterking (dag 24) verklaren het patroon niet. Eerst het register veiligstellen, dan een omkeerbare nulmeting en een stapsgewijze fijnregeling met onafhankelijke controle. De voorspelling is dag 46.",
+  "oorzaak": {
+    "ingreep": {
+      "bewering": "Op dag 10 om 02:40 is de hulpslag geactiveerd als eigen pols voor het datanet, los van de Kroonklok. De goedkeuring is alleen als 'hogerhand' genoemd, zonder naam. De eerste meting om 03:00 gaf 38% meer doorvoer.",
+      "bewijs": [
+        "ENG-011",
+        "ENG-106",
+        "ENG-105"
+      ],
+      "zekerheid": 0.85,
+      "redenering": "ENG-011 is de directe vastlegging van de activatie op dag 10 om 02:40. ENG-106 bevestigt het tijdstip en de meting van 03:00. ENG-105 bevestigt de goedkeuring, maar zonder naam. De 38% is doorvoer; volgens ENG-114 verandert versterking de doorvoer, niet het tempo, dus de meting bewijst geen tempoverandering. Alternatief: de activatie valt samen met de klacht, maar gelijktijdigheid bewijst geen oorzaak. Onzeker: de goedkeurder en de precieze wijze van activatie zijn niet vastgelegd."
+    },
+    "mechanisme": {
+      "bewering": "Een tweede pols naast de Kroonklok kan bij de overgang een bericht met de ene puls stempelen en met de andere afleveren, waardoor een tijdstempelafwijking ontstaat. Berichten 'half aangekomen' zijn daarvan een mogelijk symptoom. Het kan ook de nachtelijke stokkingen en schildopeningen veroorzaken, maar dat is niet bewezen.",
+      "bewijs": [
+        "ENG-107",
+        "ENG-102",
+        "HIS-036",
+        "HIS-103"
+      ],
+      "zekerheid": 0.3,
+      "redenering": "ENG-102 zegt dat elke boodschap op de volgende tik van de Kroonklok wacht. Een tweede pols kan daardoor de tijdsvolgorde breken. ENG-107 meldt de klacht; dat is een symptoom, geen mechanisme. HIS-036 heeft vastgelegd_op (dag 9 23:55) vóór gebeurd_op (dag 10 04:50), wat HIS-103 uitsluit. Dat past bij een tijdstempelafwijking, maar ook bij een registerfout (HIS-053 wijst daarop). De zwakste schakel is dat er geen kloksmeting of verliesmeting is. Die ontbreekt, dus het mechanisme blijft hypothese."
+    },
+    "verloop": {
+      "bewering": "Het patroon begint op dag 10, na de activatie, en keert elke vierde nacht terug (dag 10, 14, 22, 38, 42) in het venster 04:15-04:50. Het blijft bestaan na de teruggezette fijnregeling van dag 12 en na de versterking van dag 24.",
+      "bewijs": [
+        "BEA-019",
+        "BEA-020",
+        "BEA-028",
+        "BEA-046",
+        "BEA-113",
+        "ORA-110",
+        "ORA-114",
+        "ORA-130",
+        "ORA-138",
+        "ORA-142",
+        "HIS-035",
+        "ARC-015",
+        "ARC-071",
+        "GUA-019",
+        "GUA-043",
+        "ENG-061",
+        "ENG-062"
+      ],
+      "zekerheid": 0.6,
+      "redenering": "Verschillende Rollen beschrijven onafhankelijk dezelfde nachtelijke window: BEA (wolven, herten, bevers), ORA (wakker-tijden), ARC (Burchtader-stokkingen) en GUA (openingen van binnenuit). ORA-130 telt zelf de zware nachten op. ENG-061 en ENG-062 tonen dat de fijnregeling op dag 12 is teruggezet en de versterking op dag 24 het tempo niet veranderde, terwijl de nachtelijke patronen op dag 14, 22, 38 en 42 doorgaan. Dat sluit de fijnregeling en de versterking als verklaring voor het patroon uit. De conjunctie-theorie (ORA-121) is ingetrokken en wordt niet gebruikt. Dag 34 is niet geverifieerd. ORA-130 stond op een los blad en wordt pas als bewijs gebruikt na kopie in het register."
+    }
+  },
+  "acties": [
+    {
+      "actie": "Maak een afschrift van het register bij de schrijfzaal, inclusief HIS-036, HIS-053 en het los blad van ORA-130. Vermeld de brief ARC-106 (dag 8) en de goedkeuring van dag 9 in het register, met de goedkeurder als die bekend is en anders als 'onbekend'. Wijzig geen originele records.",
+      "reden": "Het register kan verloren gaan als de pols wegvalt. Het ORA-130-blad staat buiten het register. De Archmage eist opname van ARC-106.",
+      "bewijs": [
+        "HIS-110",
+        "HIS-036",
+        "ORA-130",
+        "ARC-106"
+      ],
+      "succescriterium": "Het afschrift bestaat. De originele records zijn ongewijzigd. ARC-106 en de goedkeuring staan met datum in het register."
+    },
+    {
+      "actie": "Doe een nulmeting zonder de stand te wijzigen. Noteer de versterking, de fijnregeling en de aan/uit-stand van de hulpslag. Meet het tijdstempelverschil tussen hulpslag en Kroonklok bij een vast testbericht. Meet vóór zonsopgang alle veertien lijnen, Burchtader eerst.",
+      "reden": "Er is geen kloksmeting. De huidige stand is nodig om een latere stap te kunnen terugdraaien.",
+      "bewijs": [
+        "ENG-062",
+        "ENG-061",
+        "ENG-114",
+        "ARC-116"
+      ],
+      "succescriterium": "Standen, tijdstempelverschil en lijnwaarden zijn vastgelegd als referentie, vóór enige wijziging."
+    },
+    {
+      "actie": "Monitor elke nacht van 04:00 tot 05:00 de onrust (schaal 0-5), de wakker-tijd, de stokkingen van de Burchtader, de openingen van binnenuit en de 'half aangekomen'-klachten, met hun tijdstip. Houd het venster ruim genoeg voor meettolerantie en de vierdaagse cyclus, en dek dag 46 met minstens één dag marge.",
+      "reden": "Eén nulmeting kan een intermitterend probleem niet uitsluiten. Het patroon is terugkerend en de voorspelling van dag 46 moet getoetst worden.",
+      "bewijs": [
+        "BEA-113",
+        "ORA-142",
+        "ORA-130"
+      ],
+      "succescriterium": "Minstens drie cycli zijn gemeten, waaronder dag 46, zonder standwijziging, en de tijden zijn met tolerantie vergeleken met het venster."
+    },
+    {
+      "actie": "Doe een omkeerbare proef: pas de fijnregeling van de hulpslag per stap van 0,1% aan, met een meting na elke stap. Als er een stokking of een nieuwe klacht optreedt, draai terug naar de nulstand.",
+      "reden": "Als het tijdsverschil de oorzaak is, moet de stap de klacht of het venster veranderen. De stap is omkeerbaar. Let op: de test van dag 12 veranderde de cyclus niet, dus een uitblijvend effect verzwakt de hypothese maar sluit haar niet volledig uit.",
+      "bewijs": [
+        "ENG-114",
+        "ENG-061"
+      ],
+      "succescriterium": "Drie opeenvolgende controles zonder 'half aangekomen'-klacht en met de Burchtader binnen de marge. Bij een afwijking is de stand naar de nulstand teruggedraaid."
+    },
+    {
+      "actie": "Laat de controles door een andere Rol uitvoeren. De Archmage vergelijkt stokkingen met de activatie van 02:40 op dag 10 en met de standregistratie. De Guardian vergelijkt de openingstijden van de schilden met de tik van de Kroonklok. De Engineer levert de pols-tijdstippen.",
+      "reden": "Een controle door een andere Rol voorkomt dat de uitvoerder zijn eigen hypothese bevestigt. Symptoom en mechanisme worden zo gescheiden.",
+      "bewijs": [
+        "GUA-043",
+        "ARC-071",
+        "ENG-011"
+      ],
+      "succescriterium": "Elke controle levert een vergelijkingstabel vóór en na elke stap, met tijdstippen en afwijkingen."
+    },
+    {
+      "actie": "Voorwaardelijke terugval: als de cyclus na drie gecontroleerde stappen blijft bestaan, schakel de hulpslag uit, zodat de berichten weer op de tik van de Kroonklok wachten. Controleer daarna de cyclus opnieuw.",
+      "reden": "Dit is de terugvaloptie als de hypothese van het tijdsverschil verworpen wordt. Het hersteld de bekende synchronisatie.",
+      "bewijs": [
+        "ENG-102",
+        "ENG-011"
+      ],
+      "succescriterium": "Na uitschakeling zijn er drie cycli zonder onrust van 4 of 5 in het venster en zonder 'half aangekomen'-klachten. Blijft het patroon, dan wordt de oorzaak opnieuw onderzocht."
+    },
+    {
+      "actie": "Beslis na de meting van dag 46 en de drie cycli: bevestigt de kloksmeting een tijdsverschil, houd dan de gekozen stand en log die in het register. Bevestigt de meting dat er geen tijdsverschil is, verwerp dan de hypothese en start het onderzoek naar een registerfout (HIS-053).",
+      "reden": "Een besluit moet worden vastgelegd. De hypothese is nu nog niet bewezen en de metingen moeten dat beslissen.",
+      "bewijs": [
+        "HIS-053",
+        "HIS-103"
+      ],
+      "succescriterium": "Het besluit staat in het register met een verwijzing naar de kloksmeting en de cyclusmetingen."
+    }
+  ],
+  "risicos": [
+    {
+      "risico": "De fijnregeling verergert het tijdsverschil of veroorzaakt verlies van berichten.",
+      "mitigatie": "Eén stap per keer van 0,1%, met een meting na elke stap, en terugdraaien bij de eerste klacht of stokking."
+    },
+    {
+      "risico": "Records gaan verloren of worden overschreven als de pols wegvalt of bij een correctie van HIS-036.",
+      "mitigatie": "Maak eerst een afschrift (actie 1). Wijzig geen originele records. Corrigeer alleen in een nieuw, gelabeld deel van het register."
+    },
+    {
+      "risico": "De goedkeuring is onbekend ('hogerhand'), en ARC-106 dekt de activatie van dag 10 mogelijk niet. Er bestaat een afspraak buiten het register.",
+      "mitigatie": "Leg de goedkeuring en ARC-106 vast in het register (actie 1). Dit blokkeert de technische meting niet; de registratie loopt parallel."
+    },
+    {
+      "risico": "Eén meting of een korte monitoring mist een intermitterende cyclus, waardoor een valse 'geen probleem' ontstaat.",
+      "mitigatie": "Monitor minstens drie cycli rond het venster 04:00-05:00 met meettolerantie (actie 3)."
+    },
+    {
+      "risico": "Stokkingen en openingen krijgen een verkeerde oorzaak (binnenverkeer, datanet of registerfout) doordat symptoom en mechanisme worden verward.",
+      "mitigatie": "Onafhankelijke controle door een andere Rol (actie 5) en een kloksmeting als scheidsrechter."
+    },
+    {
+      "risico": "Het uitschakelen van de hulpslag (terugval) verliest de datanetverbinding.",
+      "mitigatie": "Alleen als voorwaardelijke terugval na drie gecontroleerde stappen (actie 6), met de meting vooraf als referentie."
+    }
+  ],
+  "voorspelling": {
+    "dag": 46,
+    "bewering": "Als het vierdaagse patroon ongewijzigd doorloopt, verwacht ik op dag 46 weer een zware nacht met wakker worden en onrust rond 04:10-04:50. Dit is een voorwaardelijke extrapolatie van een vastgesteld patroon, zonder dat dit bewijs is voor de oorzaak. De voorwaarde is dat er geen standwijziging plaatsvindt die het patroon verandert.",
+    "bewijs": [
+      "ORA-142",
+      "ORA-130",
+      "BEA-113"
+    ],
+    "laatste_waargenomen_dag": 42,
+    "interval_dagen": 4
+  }
+}

@@ -14,6 +14,10 @@ Ieder Raadslid leest zijn volledige eigen MCP-bron eenmaal per beurt; herhaald b
 De publieke belangen uit de rolkaarten blijven zichtbaar in de afwegingen van de Rollen.
 De oorspronkelijke challenge-instructies hieronder blijven het uitgangspunt.
 Tests zonder API-verbruik: `uv run python -m unittest -v`.
+Uitgebreide eindcontrole zonder API-verbruik: `uv run python audit.py`.
+Deze controle leest het lokale bronpakket als onafhankelijke QA, controleert ID-bestaan,
+letterlijke broncitaten, bronafscherming, dezelfde run, voltooiing en de extra velden. Hij verandert de uitvoer niet
+en geeft geen broninhoud door aan de Koning. Voor machineleesbare uitvoer: voeg `--json` toe.
 
 ## Wat je krijgt op de dag
 
@@ -119,16 +123,18 @@ De bestaande tracevelden blijven beschikbaar. Elke routering heeft daarnaast `do
 is het null. `onderzoek` bevat voor ieder doel `status`, `samenvatting`, `bewijs`,
 `volgende_vraag`, `rol` en `blokkade`.
 
-- `open`: een uitvoerbare vervolgvraag en beschikbare Rol zijn verplicht.
+- `open`: nog niet afgerond; een geformuleerde vervolgvraag hoort bij een beschikbare Rol. Beide mogen null zijn zolang de concrete vervolgvraag nog niet is bepaald; vroeg stoppen blijft dan geblokkeerd.
 - `onderbouwd`: een conclusie met bewijs uit het debat; geen garantie van absolute zekerheid.
-- `onbeslist`: een expliciete blokkade na gerichte vragen aan twee verschillende Rollen.
+- `onbeslist`: een expliciete beperking na inhoudelijke toetsing. Antwoorden mogen meerdere doelen behandelen; alleen doellabels tellen bewijst geen inhoudelijke toetsing.
 
 Voor zelfstandig stoppen moeten alle doelen behandeld zijn en mag geen doel open zijn.
 De code reserveert de laatste beschikbare beurten voor nog niet behandelde doelen.
 Een derde vraag aan dezelfde Rol over hetzelfde doel wordt geweigerd.
+Zolang er ongehoorde perspectieven zijn, krijgt een Rol ook geen derde beurt in totaal.
+De Koning blijft zelf de volgorde en de inhoudelijke vragen kiezen.
 De onderzoeksstatus staat ook bovenaan `trace.json`; snapshots blijven per routering bewaard.
-Deze status beoordeelt de antwoorden tot aan die routering. Bij een verplichte budgetstop kan
-het laatste antwoord dus nog ontbreken in de status; de verdictgenerator beoordeelt wel het hele debat.
+Deze status beoordeelt de antwoorden tot aan die routering. Ook bij de verplichte budgetstop
+werkt de Koning de open vragen en het onderzoek bij na het laatste antwoord. Er volgt geen elfde Raadslid-beurt.
 `geschillen` wordt tijdens het debat bijgewerkt en bij het eindverdict opnieuw beoordeeld.
 Bronafscherming of 'geen standpunt' telt niet als botsend standpunt.
 
@@ -146,6 +152,22 @@ De MCP-route biedt ieder Raadslid alleen `lees_kennisbron` aan. Het framework be
 tooluitvoering na één bronlezing en vraagt daarna een tekstantwoord. Een MCP-bericht zonder
 broncall wordt geweigerd. De Koning krijgt geen van deze tools of ruwe toolresultaten.
 Bij een mislukte modelaanvraag of ongeldige uitvoer wordt de run als `fout` gemarkeerd.
+
+Raadsleden leveren hun betoog met maximaal zes `bronverwijzingen` (`id`, `citaat`). De code
+controleert ieder citaat tegen het betreffende record in de werkelijk gelezen eigen bronrespons,
+met normalisatie van witruimte en typografie. Elk eigen ID in het betoog heeft een citaat nodig.
+Bij een fout is één herstelpoging toegestaan op basis van dezelfde bronrespons, zonder nieuwe
+bronlezing. In de trace staan de passages in `tekst` en apart in `bronverwijzingen`, met
+de oorspronkelijke `bronkop` (de CSV-regel of de Markdown-recordkop), `citaatcontrole` en
+`herstelpogingen`. De kop hoort uitsluitend bij het eigen record dat het Raadslid zelf selecteerde;
+zo blijven ook de oorspronkelijke datum-/tijdvelden zichtbaar. `antwoord` bevat het betoog
+zonder de apart weergegeven citaten. De Koning ziet deze openbaar ingebrachte citaten via het
+debat, zonder toegang tot de onderliggende bronbestanden. Een geldig citaat garandeert nog
+niet dat de interpretatie klopt: juist dat moet de Council kritisch toetsen.
+
+JSON-opmaakfouten van het endpoint kunnen met `json-repair` worden gelezen, vóór de schema-
+en broncontroles. De schema's en letterlijke citaatcontrole blijven verplicht; dit is geen
+inhoudelijke correctie van een opgeslagen trace. Na ophalen van deze versie: `uv sync --locked`.
 
 ### Na je eerste run: waar kijk je naar?
 
