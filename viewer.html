@@ -57,6 +57,41 @@
   .leeg { color: var(--zacht); font-style: italic; }
   ol { padding-left: 18px; margin: 4px 0; font-size: 13px; }
   .melding { padding: 40px 16px; text-align: center; color: var(--zacht); }
+  /* Dashboard: beurten, onderzoeksvraag, open vragen */
+  .kolom { min-width: 0; }
+  #dashboard { position: sticky; top: var(--kop, 49px); z-index: 1; background: var(--bg); padding-bottom: 8px; }
+  #dashboard:empty { display: none; }
+  .dash { display: grid; grid-template-columns: 180px minmax(0, 1.3fr) minmax(0, 1fr); gap: 12px; }
+  @media (max-width: 1100px) { #dashboard { position: static; } .dash { grid-template-columns: minmax(0, 1fr); } }
+  .kaart { background: var(--paneel); border: 1px solid var(--lijn); border-radius: 10px; padding: 12px 14px; min-width: 0; }
+  .kaart h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--zacht); margin: 0 0 6px; display: flex; justify-content: space-between; gap: 8px; }
+  .groot { font-size: 34px; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .groot span { font-size: 18px; font-weight: 500; color: var(--zacht); }
+  .segmenten { display: grid; grid-template-columns: repeat(10, 1fr); gap: 3px; margin: 8px 0 6px; }
+  .segmenten i { height: 10px; border-radius: 3px; background: var(--lijn); }
+  .segmenten i.vol { background: var(--kleur); }
+  .aanwie { font-size: 13px; color: var(--zacht); }
+  .vraagtekst { font-size: 16px; font-weight: 600; margin: 4px 0 8px; overflow-wrap: anywhere; }
+  .reden { font-size: 13px; border-left: 3px solid var(--lijn); padding-left: 8px; overflow-wrap: anywhere; }
+  .reden b { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--zacht); }
+  ul.open { margin: 0; padding-left: 18px; font-size: 13px; max-height: 170px; overflow: auto; }
+  ul.open li { margin: 2px 0; overflow-wrap: anywhere; }
+  .label { font-size: 10px; font-weight: 650; text-transform: uppercase; letter-spacing: .05em; padding: 0 5px; border-radius: 4px; margin-left: 4px; vertical-align: 1px; }
+  .label.nieuw { background: color-mix(in srgb, var(--waarschuwing) 18%, transparent); color: var(--waarschuwing); }
+  .label.ok { background: color-mix(in srgb, var(--ok) 18%, transparent); color: var(--ok); }
+  .label.open { background: color-mix(in srgb, var(--fout) 15%, transparent); color: var(--fout); }
+  li.afgevinkt { text-decoration: line-through; color: var(--zacht); }
+  /* Geschillen en zekerheid */
+  .geschil { display: block; color: inherit; text-decoration: none; font-size: 13px; padding: 6px 0; border-top: 1px solid var(--lijn); }
+  .geschil:first-child { border-top: 0; padding-top: 0; }
+  .geschil:hover .onderwerp { text-decoration: underline; }
+  .geschil .onderwerp { font-weight: 600; }
+  .stipjes { display: inline-flex; gap: 3px; margin-right: 4px; vertical-align: 1px; }
+  .stipjes i { width: 8px; height: 8px; border-radius: 50%; background: var(--kleur); }
+  .zeker { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; margin-top: 4px; }
+  .meter { height: 8px; background: var(--lijn); border-radius: 4px; overflow: hidden; }
+  .meter i { display: block; height: 100%; background: var(--k); border-radius: 4px; }
+  .doel { scroll-margin-top: 260px; }
 </style>
 </head>
 <body>
@@ -66,12 +101,16 @@
   <span id="runid" class="runid"></span>
 </header>
 <main>
-  <div id="debat"><p class="melding">Nog geen <code>trace.json</code>. Start je Council met <code>uv run council</code>; het debat verschijnt hier live.</p></div>
+  <div class="kolom">
+    <div id="dashboard"></div>
+    <div id="debat"><p class="melding">Nog geen <code>trace.json</code>. Start je Council met <code>uv run council</code>; het debat verschijnt hier live.</p></div>
+  </div>
   <aside>
+    <section><h2>Council Verdict</h2><div id="verdict"><span class="leeg">nog geen verdict.json</span></div></section>
+    <section><h2>Geschillen</h2><div id="geschillen"><span class="leeg">nog geen trace.json</span></div></section>
     <section><h2>Raadsleden</h2><div id="leden"></div></section>
     <section><h2>Spelregels</h2><div id="checks"></div></section>
     <section><h2>Verbruik</h2><div id="verbruik"></div></section>
-    <section><h2>Council Verdict</h2><div id="verdict"><span class="leeg">nog geen verdict.json</span></div></section>
   </aside>
 </main>
 <script>
@@ -154,13 +193,57 @@ function render(trace, verdict) {
   if (bezig && trace.aan_het_woord) {
     html += `<div class="beurt denkt" style="--kleur:${kleur(trace.aan_het_woord)}"><div class="wie">${esc(NAMEN[trace.aan_het_woord] || trace.aan_het_woord)}</div><div class="tekst leeg">denkt na…</div></div>`;
   }
-  for (const g of trace.geschillen || []) {
-    html += `<div class="ronde">Geschil</div><div class="beurt" style="--kleur:var(--koning)"><div class="wie">${esc(g.onderwerp)}</div><div class="tekst">${Object.entries(g.standpunten || {}).map(([r, s]) => `<b style="color:${kleur(r)}">${esc(NAMEN[r] || r)}</b>: ${opmaak(s)}`).join("<br>")}<br><b>Uitkomst:</b> ${g.uitkomst ? opmaak(g.uitkomst) : '<span class="leeg">niet beslecht</span>'} ${(g.bewijs || []).map(i => opmaak(i)).join(" ")}</div></div>`;
+  for (const [gi, g] of (trace.geschillen || []).entries()) {
+    html += `<div class="ronde">Geschil ${gi + 1}</div><div class="beurt doel" id="geschil-${gi + 1}" style="--kleur:var(--koning)"><div class="wie">${esc(g.onderwerp)}</div><div class="tekst">${Object.entries(g.standpunten || {}).map(([r, s]) => `<b style="color:${kleur(r)}">${esc(NAMEN[r] || r)}</b>: ${opmaak(s)}`).join("<br>")}<br><b>Uitkomst:</b> ${g.uitkomst ? opmaak(g.uitkomst) : '<span class="leeg">niet beslecht</span>'} ${(g.bewijs || []).map(i => opmaak(i)).join(" ")}</div></div>`;
   }
   const debat = document.getElementById("debat");
   const onderaan = window.innerHeight + window.scrollY >= document.body.scrollHeight - 80;
   debat.innerHTML = html || '<p class="melding">De run is gestart; de eerste beurt komt eraan.</p>';
   if (bezig && onderaan) window.scrollTo(0, document.body.scrollHeight);
+
+  // Dashboard: beurten/10, huidige onderzoeksvraag + reden, open vragen
+  const routeringen = beurten.filter(b => b.soort === "routering");
+  const laatste = routeringen.at(-1), ervoor = routeringen.at(-2);
+  const sprekers = beurten.filter(b => b.soort === "bericht" && NAMEN[b.spreker] && !["koning", "mens"].includes(b.spreker)).map(b => b.spreker);
+  const gestopt = !!laatste && laatste.aan === null;
+  const zelfGestopt = gestopt && sprekers.length < BEURTENBUDGET;
+  const vasteVolgorde = routeringen.filter(r => r.reden === "vaste volgorde").length;
+  const segmenten = Array.from({ length: BEURTENBUDGET }, (_, i) => sprekers[i]
+    ? `<i class="vol" style="--kleur:${kleur(sprekers[i])}" title="Beurt ${i + 1}: ${esc(NAMEN[sprekers[i]] || sprekers[i])}"></i>` : "<i></i>").join("");
+  const budgetTekst = gestopt
+    ? (zelfGestopt ? `Koning stopte zelf · ${BEURTENBUDGET - sprekers.length} over` : "Beurtenbudget op")
+    : `${Math.max(0, BEURTENBUDGET - sprekers.length)} beurten over`;
+
+  let vraagHtml;
+  if (!laatste) vraagHtml = '<span class="leeg">De Koning heeft nog niemand aan het woord gelaten.</span>';
+  else if (gestopt) vraagHtml = `<div class="aanwie">Routering #${laatste.nr}</div><div class="vraagtekst">De Koning stopt het debat</div><div class="reden"><b>Waarom stoppen</b>${opmaak(laatste.reden)}</div>`;
+  else vraagHtml = `<div class="aanwie">${esc(NAMEN[laatste.spreker] || laatste.spreker)} → <b style="color:${kleur(laatste.aan)}">${esc(NAMEN[laatste.aan] || laatste.aan)}</b> · routering #${laatste.nr}</div>`
+    + `<div class="vraagtekst">${opmaak(laatste.vraag)}</div>`
+    + `<div class="reden"><b>Waarom deze spreker</b>${opmaak(laatste.reden)}${laatste.reden === "vaste volgorde" ? ' <span class="vlag">de Koning kiest nog niet zelf</span>' : ""}</div>`;
+
+  const nu = laatste?.open_vragen, toen = ervoor?.open_vragen || [];
+  let openHtml, openAantal = "";
+  if (!Array.isArray(nu)) openHtml = '<span class="leeg">De Koning houdt (nog) geen open vragen bij.</span>';
+  else {
+    const afgevinkt = toen.filter(v => !nu.includes(v));
+    openAantal = String(nu.length);
+    openHtml = (nu.length
+      ? `<ul class="open">${nu.map(v => `<li>${opmaak(v)}${ervoor && !toen.includes(v) ? '<span class="label nieuw">nieuw</span>' : ""}</li>`).join("")}</ul>`
+      : '<span class="leeg">Geen open vragen meer.</span>')
+      + (afgevinkt.length ? `<div class="getal" style="margin-top:6px">Afgevinkt sinds de vorige keuze</div><ul class="open">${afgevinkt.map(v => `<li class="afgevinkt">${opmaak(v)}</li>`).join("")}</ul>` : "");
+  }
+  document.documentElement.style.setProperty("--kop", document.querySelector("header").offsetHeight + "px");
+  document.getElementById("dashboard").innerHTML = beurten.length ? `<div class="dash">
+    <div class="kaart"><h2>Beurten</h2><div class="groot">${sprekers.length}<span>/${BEURTENBUDGET}</span></div><div class="segmenten">${segmenten}</div><div class="getal">${budgetTekst}</div></div>
+    <div class="kaart"><h2>${gestopt ? "Laatste beslissing" : "Huidige onderzoeksvraag"}</h2>${vraagHtml}</div>
+    <div class="kaart"><h2><span>Open vragen</span><span>${openAantal}</span></h2>${openHtml}</div>
+  </div>` : "";
+
+  // Geschillen
+  const geschillen = trace.geschillen || [];
+  document.getElementById("geschillen").innerHTML = geschillen.length
+    ? geschillen.map((g, i) => `<a class="geschil" href="#geschil-${i + 1}"><span class="stipjes">${Object.keys(g.standpunten || {}).map(r => `<i style="--kleur:${kleur(r)}" title="${esc(NAMEN[r] || r)}"></i>`).join("")}</span><span class="onderwerp">${esc(g.onderwerp)}</span>${g.uitkomst ? '<span class="label ok">beslecht</span>' : '<span class="label open">open</span>'}<br><span class="getal">${Object.keys(g.standpunten || {}).map(r => esc(NAMEN[r] || r)).join(" vs ")}${(g.bewijs || []).length ? " · " + g.bewijs.length + " bewijs-ID's" : ""}</span></a>`).join("")
+    : `<span class="leeg">${bezig ? "De Koning vult de geschillen in na het debat." : "Geen geschillen in deze trace."}</span>`;
 
   // Raadsleden
   document.getElementById("leden").innerHTML = [...(trace.raadsleden || []), "koning"].map(r => {
@@ -178,6 +261,10 @@ function render(trace, verdict) {
     [(trace.raadsleden || []).length >= 3 ? "ok" : "let", `${(trace.raadsleden || []).length} Rollen (minimum 3)`],
     [raadslidBeurten > BEURTENBUDGET ? "fout" : "ok", `${raadslidBeurten} van ${BEURTENBUDGET} Raadslid-beurten (Beurtenbudget)`],
     [zonderRoutering.length ? "fout" : "ok", zonderRoutering.length ? `Raadslid-beurt zonder Routering ervoor (beurt ${zonderRoutering.join(", ")})` : "Elke Raadslid-beurt had een Routering"],
+    [vasteVolgorde ? "let" : "ok", vasteVolgorde ? `${vasteVolgorde} keer "vaste volgorde": de Koning kiest nog niet zelf` : "Elke Routering heeft een eigen reden"],
+    [routeringen.some(r => Array.isArray(r.open_vragen)) ? "ok" : "let", routeringen.some(r => Array.isArray(r.open_vragen)) ? "Koning houdt open vragen bij" : "Geen open vragen in de Routeringen"],
+    ...(gestopt ? [[zelfGestopt ? "ok" : "let", zelfGestopt ? "Koning stopte zelf vóór het budget op was" : "Debat stopte pas toen het budget op was"]] : []),
+    ...(!bezig ? [[geschillen.length ? "ok" : "let", geschillen.length ? `${geschillen.length} geschil(len) in de trace` : "Geen geschillen in de trace"]] : []),
   ];
   document.getElementById("checks").innerHTML = checks.map(([k, t]) => `<div class="check ${k}">${esc(t)}</div>`).join("");
 
@@ -192,12 +279,20 @@ function render(trace, verdict) {
   if (!verdict || verdict.run_id !== trace.run_id) {
     vd.innerHTML = `<span class="leeg">${verdict ? "verdict.json hoort bij een andere run" : bezig ? "komt na de Koning" : "geen verdict.json"}</span>`;
   } else {
-    const slot = (naam, s) => `<div class="slot"><b>${naam}</b>${s?.bewering ? opmaak(s.bewering) + " " + (s.bewijs || []).map(i => opmaak(i)).join(" ") : '<span class="leeg">onbekend (null)</span>'}</div>`;
+    const zekerheid = s => {
+      if (typeof s?.zekerheid !== "number") return '<div class="getal">zekerheid: niet opgegeven</div>';
+      const p = Math.round(Math.min(1, Math.max(0, s.zekerheid)) * 100);
+      const k = p >= 70 ? "var(--ok)" : p >= 40 ? "var(--waarschuwing)" : "var(--fout)";
+      return `<div class="zeker" title="zekerheid ${s.zekerheid}"><div class="meter"><i style="width:${p}%;--k:${k}"></i></div><span class="getal">${p}% zeker</span></div>`;
+    };
+    const slot = (naam, s) => `<div class="slot"><b>${naam}</b>${s?.bewering ? opmaak(s.bewering) + " " + (s.bewijs || []).map(i => opmaak(i)).join(" ") : '<span class="leeg">onbekend (null)</span>'}${zekerheid(s)}</div>`;
+    const vs = verdict.voorspelling;
+    const voorspelling = vs ? `<div class="slot"><b>Voorspelling · dag ${esc(vs.dag)}</b>${opmaak(vs.bewering)} ${(vs.bewijs || []).map(i => opmaak(i)).join(" ")}</div>` : "";
     const o = verdict.oorzaak || {};
     vd.innerHTML = `<div class="slot"><b>Samenvatting</b>${verdict.samenvatting === "TODO" ? '<span class="leeg">TODO</span>' : opmaak(verdict.samenvatting)}</div>`
       + slot("Ingreep", o.ingreep) + slot("Mechanisme", o.mechanisme) + slot("Verloop", o.verloop)
       + `<div class="slot"><b>Herstelplan</b><ol>${(verdict.acties || []).map(a => `<li>${opmaak(a.actie)}</li>`).join("")}</ol></div>`
-      + `<div class="slot"><b>Risico's</b><ol>${(verdict.risicos || []).map(r => `<li>${opmaak(r.risico)}</li>`).join("")}</ol></div>`;
+      + `<div class="slot"><b>Risico's</b><ol>${(verdict.risicos || []).map(r => `<li>${opmaak(r.risico)}</li>`).join("")}</ol></div>` + voorspelling;
   }
 }
 
