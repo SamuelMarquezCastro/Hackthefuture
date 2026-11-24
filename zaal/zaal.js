@@ -16,6 +16,7 @@ const STOEL_R = 4.3;          // straal waarop de stoelen staan
 const TAFEL_Y = 1.25;         // hoogte van het tafelblad
 const TYP_SNELHEID = 70;      // tekens per seconde bij 1×
 const AFGEBROKEN = Symbol("afgebroken");
+const params = new URLSearchParams(location.search);   // ?tempo=4  ·  ?zonderintro (live meekijken zonder gordijn)
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -364,6 +365,7 @@ function spotOp(rol) {
 const cam = { pos: new THREE.Vector3(0, 6, 12), kijk: new THREE.Vector3(0, 1.4, 0), doelPos: new THREE.Vector3(0, 5.4, 10.5),
   doelKijk: new THREE.Vector3(0, 1.4, 0), snelheid: 2.5, modus: "overzicht", baan: 0 };
 function shot(soort, rol, rol2) {
+  if (cam.modus === "intro" && !intro.klaar) return;
   const zelfde = cam.modus !== "overzicht" && cam.rol === rol && cam.modus !== "duel" && soort !== "duel";
   cam.modus = soort; cam.rol = rol;
   if (soort === "overzicht") { cam.snelheid = 1.2; return; }
@@ -386,6 +388,14 @@ function shot(soort, rol, rol2) {
   }
 }
 function updateCamera(dt, t) {
+  if (cam.modus === "intro") {
+    if (intro.bezig) cam.introT = (cam.introT || 0) + dt;
+    const p = Math.min(1, (cam.introT || 0) / INTRO_CAMERA), e = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
+    const a = -1.0 + e * 2.0, r = 11.8 - e * 4.3, y = 7.6 - e * 3.9;
+    cam.pos.set(Math.sin(a) * r, y, Math.cos(a) * r); cam.kijk.set(0, 1.6 + e * 0.2, 0);
+    cam.doelPos.copy(cam.pos); cam.doelKijk.copy(cam.kijk);
+    camera.position.copy(cam.pos); camera.lookAt(cam.kijk); return;
+  }
   if (cam.modus === "overzicht") {
     cam.baan += dt * 0.06;
     cam.doelPos.set(Math.sin(cam.baan) * 9.5, 5.2 + Math.sin(t * 0.2) * 0.3, Math.cos(cam.baan) * 9.5); cam.doelKijk.set(0, 1.5, 0);
@@ -420,6 +430,54 @@ function bezwaarGeluid() {
     g.gain.setValueAtTime(0.0001, t + d); g.gain.exponentialRampToValueAtTime(0.12, t + d + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + d + 0.5);
     o.connect(g).connect(c.destination); o.start(t + d); o.stop(t + d + 0.55);
   }
+}
+
+// Intromuziek: een korte plechtige 8-bit fanfare met bas, akkoord en trommelslagen (ongeveer 5,5 seconden).
+function introMuziek() {
+  if (!geluid.aan || !geluid.ctx) return;
+  const c = geluid.ctx, t0 = c.currentTime + 0.05;
+  const noot = (f, s, d, type = "square", v = 0.05) => {
+    const o = c.createOscillator(), g = c.createGain(); o.type = type; o.frequency.value = f;
+    g.gain.setValueAtTime(0.0001, t0 + s); g.gain.exponentialRampToValueAtTime(v, t0 + s + 0.02);
+    g.gain.setValueAtTime(v, t0 + s + d * 0.7); g.gain.exponentialRampToValueAtTime(0.0001, t0 + s + d);
+    o.connect(g).connect(c.destination); o.start(t0 + s); o.stop(t0 + s + d + 0.05);
+  };
+  noot(73.42, 0, 5.6, "triangle", 0.09); noot(110, 0, 5.6, "triangle", 0.04);           // bourdon in D
+  const melodie = [[293.66, 0, .35], [349.23, .35, .35], [440, .7, .35], [587.33, 1.05, .9], [523.25, 2.0, .3],
+    [466.16, 2.3, .3], [440, 2.6, .6], [392, 3.25, .3], [440, 3.55, .3], [293.66, 3.85, 1.7]];
+  for (const [f, s, d] of melodie) { noot(f, s, d, "square", 0.045); noot(f / 2, s, d, "triangle", 0.035); }
+  for (const f of [349.23, 440, 587.33]) noot(f, 3.85, 1.7, "triangle", 0.03);          // slotakkoord
+  for (const s of [0, 1.05, 2.0, 3.85]) {                                                  // trommelslagen
+    const len = 0.3, buf = c.createBuffer(1, c.sampleRate * len, c.sampleRate), d = buf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 3);
+    const src = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain();
+    f.type = "lowpass"; f.frequency.value = 380; g.gain.value = 0.55; src.buffer = buf;
+    src.connect(f).connect(g).connect(c.destination); src.start(t0 + s);
+  }
+}
+
+// ───────────────────────── Intro: gordijn open, muziek, camera rond de tafel ─────────────────────────
+const INTRO_CAMERA = 6.5;   // seconden dat de camera rond de tafel vliegt
+const intro = { klaar: false, bezig: false, timer: null };
+function startIntro() {
+  if (intro.klaar || intro.bezig) return;
+  intro.bezig = true;
+  if (!geluid.aan) zetGeluid(true);   // de klik is de gebruikersactie die geluid toestaat
+  introMuziek();
+  $("startscherm").classList.add("weg");
+  setTimeout(() => $("gordijn").classList.add("open"), 250);
+  cam.modus = "intro"; cam.introT = 0;
+  intro.timer = setTimeout(eindigIntro, (INTRO_CAMERA + 0.4) * 1000);
+}
+function eindigIntro() {
+  clearTimeout(intro.timer); intro.bezig = false; intro.klaar = true;
+  $("startscherm").classList.add("weg"); $("gordijn").classList.add("open");
+  if (cam.modus === "intro") shot("overzicht");
+}
+function sluitGordijn() {
+  clearTimeout(intro.timer); intro.klaar = false; intro.bezig = false;
+  $("gordijn").classList.remove("open"); $("startscherm").classList.remove("weg");
+  cam.modus = "intro"; cam.introT = 0;
 }
 
 // ───────────────────────── Afspeler: wachten, typen, klikken, overslaan ─────────────────────────
@@ -758,7 +816,7 @@ function naarLive() {
 async function regisseur() {
   while (true) {
     try {
-      if (!trace) { await wacht(400); continue; }
+      if (!trace || !intro.klaar) { await wacht(200); continue; }
       const b = trace.beurten || [];
       if (speler.i < b.length) { const beurt = b[speler.i]; await speelBeurt(beurt); speler.i++; continue; }
       if (trace.status === "fout" && speler.fase === "debat") {
@@ -785,19 +843,20 @@ async function regisseur() {
 
 // ───────────────────────── Knoppen en toetsen ─────────────────────────
 canvas.addEventListener("click", klik); $("dialoog").addEventListener("click", klik);
-$("k-opnieuw").onclick = () => herstart();
+$("k-opnieuw").onclick = () => { herstart(); if (!params.has("zonderintro")) sluitGordijn(); };
+$("k-start").onclick = e => { e.stopPropagation(); startIntro(); };
 $("k-pauze").onclick = () => { speler.pauze = !speler.pauze; $("k-pauze").textContent = speler.pauze ? "▶" : "⏸"; $("k-pauze").classList.toggle("aan", speler.pauze); };
-$("k-volgende").onclick = () => volgende();
+$("k-volgende").onclick = () => { if (!intro.klaar) return eindigIntro(); volgende(); };
 $("k-tempo").onclick = () => { speler.tempo = speler.tempo >= 4 ? 1 : speler.tempo * 2; $("k-tempo").textContent = speler.tempo + "×"; };
 $("k-live").onclick = () => naarLive();
 $("k-geluid").onclick = () => zetGeluid(!geluid.aan);
 addEventListener("keydown", e => {
+  if (!intro.klaar && (e.key === " " || e.key === "Enter")) { e.preventDefault(); return startIntro(); }
   if (e.key === " " || e.key === "Enter") { e.preventDefault(); klik(); }
-  else if (e.key === "ArrowRight") volgende();
+  else if (e.key === "ArrowRight") $("k-volgende").click();
   else if (e.key.toLowerCase() === "p") $("k-pauze").click();
   else if (e.key.toLowerCase() === "m") $("k-geluid").click();
 });
-const params = new URLSearchParams(location.search);
 if (params.has("tempo")) { speler.tempo = Number(params.get("tempo")) || 1; $("k-tempo").textContent = speler.tempo + "×"; }
 
 // ───────────────────────── Animatielus ─────────────────────────
@@ -837,4 +896,6 @@ function frame() {
 
 zetKaarsen(0, false);
 $("laden").remove();
+cam.modus = "intro"; cam.introT = 0;
+if (params.has("zonderintro")) eindigIntro();
 frame(); lus(); regisseur();
