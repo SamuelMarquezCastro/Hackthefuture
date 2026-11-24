@@ -205,6 +205,24 @@ const kristal = new THREE.Mesh(new THREE.OctahedronGeometry(0.42, 0), ps1(new TH
 kristal.position.y = TAFEL_Y + 1.05; kristal.scale.y = 1.5; zaal.add(kristal);
 const kristalLicht = new THREE.PointLight(0x9a5cff, 6, 9, 1.4); kristalLicht.position.y = TAFEL_Y + 1.1; scene.add(kristalLicht);
 
+// Zwevende runen rond het kristal: hoe verder het onderzoek, hoe meer runen fel oplichten.
+const RUNEN_VORM = [
+  [[3,1,3,13],[3,4,9,1],[3,8,9,5]], [[3,1,3,13],[3,1,9,7],[9,7,3,13]], [[6,1,6,13],[2,4,10,10],[10,4,2,10]], [[2,13,6,1],[6,1,10,13],[4,8,8,8]],
+  [[3,1,3,13],[9,1,9,13],[3,1,9,13]], [[6,1,6,13],[6,5,10,1],[6,5,2,1]], [[2,1,10,1],[6,1,6,13],[2,13,10,13]], [[2,7,6,1],[6,1,10,7],[10,7,6,13],[6,13,2,7]],
+];
+const runen = RUNEN_VORM.map((lijnen, i) => {
+  const tex = textuur(12, 14, g => {
+    g.fillStyle = "#fff";
+    for (const [x1, y1, x2, y2] of lijnen) {
+      const n = Math.max(Math.abs(x2 - x1), Math.abs(y2 - y1));
+      for (let k = 0; k <= n; k++) g.fillRect(Math.round(x1 + (x2 - x1) * k / n), Math.round(y1 + (y2 - y1) * k / n), 1, 1);
+    }
+  });
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }));
+  sp.scale.set(0.36, 0.42, 1); sp.userData.fase = i / RUNEN_VORM.length * Math.PI * 2; zaal.add(sp);
+  return sp;
+});
+
 // Tien kaarsen = het Beurtenbudget. Na elke Raadslid-beurt gaat er één uit.
 const kaarsen = [];
 for (let i = 0; i < BEURTENBUDGET; i++) {
@@ -745,8 +763,15 @@ function toonKaarten(rol, verwijzingen, controle) {
   if (verwijzingen.length > 3) { const m = document.createElement("div"); m.className = "kop"; m.textContent = `+${verwijzingen.length - 3} meer bronnen in de debatviewer`; doos.appendChild(m); }
 }
 function verbergKaarten() { $("kaarten").innerHTML = ""; }
+// Zoom-slam: snelle inzoom met een schok op wie spreekt (bij bewijs en na BEZWAAR!)
+function slam() {
+  if (cam.modus !== "dichtbij" && cam.modus !== "half") return;
+  cam.pos.lerp(cam.kijk, 0.42);
+  document.body.classList.remove("schud"); void document.body.offsetWidth; document.body.classList.add("schud");
+  setTimeout(() => document.body.classList.remove("schud"), 380);
+}
 function stempel() {
-  const s = $("stempel"); s.classList.remove("zicht"); void s.offsetWidth; s.classList.add("zicht");
+  const s = $("stempel"); s.classList.remove("zicht"); void s.offsetWidth; s.classList.add("zicht"); slam();
   setTimeout(() => { toon(90, 0, 0.3, "sine", 0.18); toon(180, 0, 0.12, "square", 0.04); }, 200);
 }
 
@@ -838,8 +863,10 @@ async function speelGeschil(g, nr) {
   }
   await toonDialoog("koning", `Geschil ${nr}`, g.onderwerp || ""); if (controleer(sprong)) return;
   await wacht(leestijd(g.onderwerp || ""), true); if (controleer(sprong)) return;
+  let eerste = true;
   for (const [rol, standpunt] of Object.entries(g.standpunten || {})) {
     if (zetels[rol]) { shot("dichtbij", rol); spotOp(rol); }
+    if (eerste && Object.keys(g.standpunten || {}).length >= 2) { eerste = false; setTimeout(slam, 120); }
     for (const p of paginas(schoon(standpunt))) {
       await toonDialoog(rol, esc(naam(rol)), p); if (controleer(sprong)) return;
       await wacht(leestijd(p), true); if (controleer(sprong)) return;
@@ -1039,6 +1066,13 @@ function frame() {
   kristalLicht.color.copy(kristal.material.emissive);
   kristalLicht.intensity = (5 + kristalStaat.nu * 6) * (1 + Math.sin(t * 2) * 0.2);
   updateVliegers(dt);
+  const fel = 2 + Math.round(kristalStaat.nu * (runen.length - 2));
+  runen.forEach((sp, i) => {
+    const a = sp.userData.fase + t * 0.45, r = 1.05 + Math.sin(t * 0.9 + i) * 0.08;
+    sp.position.set(Math.sin(a) * r, TAFEL_Y + 1.25 + Math.sin(t * 1.4 + i * 1.7) * 0.22, Math.cos(a) * r);
+    sp.material.color.copy(kristal.material.color).lerp(new THREE.Color(0xffffff), 0.5).multiplyScalar(i < fel ? 2.2 : 0.8);
+    sp.material.opacity = (i < fel ? 1 : 0.35) * (0.8 + 0.2 * Math.sin(t * 3 + i));
+  });
   // Personages ademen; wie gloeit (toolcall / gekozen) licht op
   for (const [rol, z] of Object.entries(zetels)) {
     if (!z.figuur) continue;
