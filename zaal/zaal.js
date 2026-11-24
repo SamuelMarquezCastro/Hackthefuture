@@ -442,14 +442,14 @@ function units(tekst) {
   for (const ch of tekst.slice(i)) uit.push({ html: esc(ch), n: 1 });
   return uit;
 }
-function toonDialoog(rol, naambord, tekst, sub = "", pagina = "") {
+function toonDialoog(rol, naambord, tekst, sub = "", pagina = "", klasse = "") {
   const d = $("dialoog"); d.classList.remove("weg");
   $("naambord").innerHTML = naambord; d.style.setProperty("--kleur", KLEUR[rol] || "#6a52a8");
   $("naambord").style.background = KLEUR[rol] || "#6a52a8";
   $("sub").innerHTML = sub; $("sub").classList.remove("zicht"); $("verder").classList.remove("zicht");
   $("pagina").textContent = pagina;
   dlg.units = units(tekst); dlg.totaal = dlg.units.length; dlg.getoond = 0; dlg.rol = rol; dlg.laatst = -1;
-  $("tekst").innerHTML = "";
+  $("tekst").innerHTML = ""; $("tekst").className = klasse;
   const gen = speler.gen;
   return new Promise((res, rej) => { dlg.klaar = res; dlg.rej = rej; dlg.gen = gen; });
 }
@@ -554,17 +554,15 @@ async function speelRoutering(b) {
   shot("dichtbij", "koning"); spotOp("koning");
   zetOpenVragen(b.open_vragen);
   await wacht(450); if (controleer(sprong)) return;
-  if (b.aan) {
-    zetels[b.aan] && (zetels[b.aan].gloed = 1);
-    const vaste = b.reden === "vaste volgorde";
-    await toonDialoog("koning", `Koning <span class="pijl">→</span> ${esc(naam(b.aan))}`, `${naam(b.aan)}, ${kleineLetter(b.vraag || "spreek.")}`,
-      `Waarom ${esc(naam(b.aan))}? ${esc(b.reden)}${vaste ? " (de Koning kiest nog niet zelf)" : ""}`);
+  const bord = b.aan ? `Koning <span class="pijl">→</span> ${esc(naam(b.aan))}` : "Koning";
+  if (b.aan && zetels[b.aan]) zetels[b.aan].gloed = 1;
+  const vraag = b.aan ? `${naam(b.aan)}, ${kleineLetter(b.vraag || "spreek.")}` : "Genoeg. De Raad heeft gesproken: het debat is gesloten.";
+  const reden = b.aan ? `Waarom ${naam(b.aan)}? ${b.reden || ""}${b.reden === "vaste volgorde" ? " (de Koning kiest nog niet zelf)" : ""}` : `Waarom nu? ${b.reden || ""}`;
+  const stukken = [...paginas(vraag).map(t => [t, ""]), ...paginas(reden).map(t => [t, "reden"])];
+  for (let k = 0; k < stukken.length; k++) {
+    await toonDialoog("koning", bord, stukken[k][0], "", stukken.length > 1 ? `${k + 1}/${stukken.length}` : "", stukken[k][1]);
     if (controleer(sprong)) return;
-    await wacht(leestijd(b.vraag || "") + (b.reden || "").length * 10, true);
-  } else {
-    await toonDialoog("koning", "Koning", "Genoeg. De Raad heeft gesproken: het debat is gesloten.", `Waarom nu? ${esc(b.reden)}`);
-    if (controleer(sprong)) return;
-    await wacht(leestijd(b.reden || "") + 800, true);
+    await wacht(leestijd(stukken[k][0]), true); if (controleer(sprong)) return;
   }
 }
 

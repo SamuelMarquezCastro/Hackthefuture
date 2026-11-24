@@ -48,6 +48,8 @@
     border: 3px solid var(--rand); color: #fff; font-size: .8em; text-transform: uppercase; }
   #naambord .pijl { opacity: .85; }
   #tekst { min-height: 3.6em; }
+  #tekst.reden { font-style: italic; color: #d8ccf6; }
+  #tekst.reden::before { content: "✦ "; color: var(--goud); font-style: normal; }
   #sub { margin-top: 10px; font-size: .72em; color: #cfc2f2; font-style: italic; opacity: 0; transition: opacity .3s; }
   #sub.zicht { opacity: 1; }
   #verder { position: absolute; right: 18px; bottom: 8px; color: var(--goud); animation: knip .8s steps(2) infinite; opacity: 0; }
