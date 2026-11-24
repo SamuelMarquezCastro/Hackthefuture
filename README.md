@@ -6,6 +6,12 @@ De Desync heeft de herinneringen en systemen van Achrona versnipperd. Jullie bou
 
 Deze kit geeft jullie binnen het eerste halfuur een draaiende mini-Council die je live in je browser ziet debatteren. Het echte werk is aan jullie: de **Koning** het debat laten leiden. Hij beslist welk Raadslid spreekt, met welke vraag en waarom. (In AI-termen heet dat deel een orchestrator.)
 
+**Onze teamversie:** de Koning kiest nu met `MODEL_GROOT` per beurt de Rol, onderzoeksvraag,
+reden en open vragen. Hij kan zelfstandig stoppen. Het eindverdict en de geschillen worden
+als JSON gegenereerd en gecontroleerd op schema en bewijsverwijzingen uit het debat.
+De oorspronkelijke challenge-instructies hieronder blijven het uitgangspunt.
+Tests zonder API-verbruik: `uv run python -m unittest -v`.
+
 ## Wat je krijgt op de dag
 
 | Wat | Wanneer | Waar |
@@ -57,7 +63,7 @@ Maak thuis al je repo aan (stap 1–2 hieronder) en draai daarin `uv sync` (en `
    ```
    uv run validate
    ```
-   Groen = `verdict.json` en `trace.json` volgen het schema en komen uit dezelfde run. Groen betekent geldig, nog niet goed: het Verdict van de kit is nog leeg (TODO).
+   Groen = `verdict.json` en `trace.json` volgen het schema en komen uit dezelfde run. Controleer daarna zelf of de conclusies echt door het aangehaalde bewijs worden ondersteund; geldig betekent nog niet inhoudelijk goed.
 
 Geen uv? Maak een venv (`python -m venv .venv`, activeer met `.venv\Scripts\activate` op Windows of `source .venv/bin/activate`), dan `pip install -e .` en `python viewer.py`, `python council.py`, `python validate.py`.
 
@@ -77,7 +83,7 @@ Viewer op een andere poort: zet `VIEWER_PORT=8101` als omgevingsvariabele. Een a
 
 | Bestand | Wat |
 |---|---|
-| `council.py` | De Koning die het debat leidt (`kies_volgende()`, nu een vaste volgorde), het debat zelf en het Verdict van de Koning. Schrijft `trace.json` na elke beurt en `verdict.json` aan het einde. |
+| `council.py` | De Koning die via een LLM de volgende spreker kiest, het debat zelf en de generatie van het Verdict en geschillen. Schrijft `trace.json` na elke beurt en `verdict.json` aan het einde. |
 | `raadsleden/<rol>.py` | Eén bestand per Raadslid: Rol, naam en publiek perspectief. |
 | `rolkaarten.md` | De zes Rolkaarten: perspectief, publiek Belang en soort Kennisbron per Rol. Begin hier om je Rollen te kiezen. |
 | `viewer.py` + `viewer.html` | De debatviewer (`uv run viewer`). Leest alleen `trace.json` en `verdict.json`, dus werkt ook als je een ander platform kiest. |
@@ -92,16 +98,16 @@ Viewer op een andere poort: zet `VIEWER_PORT=8101` als omgevingsvariabele. Een a
 - **Welke Rollen** meedoen: kopieer `raadsleden/oracle.py` naar bv. `raadsleden/engineer.py` en pas aan: `ROL` = de mapnaam van de Rol in kleine letters (`archmage`, `engineer`, `guardian_keeper`, `historian`, `oracle`, `beast_master`); `NAAM` en `PERSPECTIEF` haal je van de Rolkaart in `rolkaarten.md`. Het nieuwe bestand doet vanzelf mee; de volgorde in het debat is alfabetisch op bestandsnaam. Voeg in `.env` een regel `MCP_<ROL>=https://<mcp-host>/<rol>/mcp` toe.
 - **Kennisbronnen**: standaard leest elk Raadslid via MCP. Laat je `MCP_<ROL>` leeg, dan plakt de kit de bestanden uit `kennisbronnen/<rol>/` (uit `pack.zip`) in de prompt van dat Raadslid. Heeft een Raadslid geen van beide, dan meldt de kit dat bij de start.
 - **Modellen**: `MODEL_KLEIN` voor de Raadsleden, `MODEL_GROOT` voor de Koning, `REASONING` voor het denkwerk. Op het Roboest-endpoint zijn dat `achrona` en `achrona-groot`. Een andere provider kies je alleen via `.env` (blokken voor het Roboest-endpoint, FreeLLMAPI en Ollama). Met FreeLLMAPI kies je `auto:fast`/`auto:smartest` of een vast model uit de catalogus op http://localhost:3001. Support geven we op het Roboest-endpoint en FreeLLMAPI; andere eigen modellen mogen, zonder support.
-- **Rondes**: `RONDES` in `.env` geldt alleen voor de vaste volgorde van de kit. Het Beurtenbudget (10 Raadslid-beurten) geldt altijd.
+- **Rondes**: onze Koning kiest zelf wanneer hij stopt; `RONDES` wordt in deze teamversie niet gebruikt. Het Beurtenbudget (10 Raadslid-beurten) geldt altijd.
 - **Het debat zelf**: de instructies, wie wie aan het woord laat (`kies_volgende()`), wat elk Raadslid van het debat ziet, en hoe de Koning het Verdict invult. Dat staat allemaal in `council.py`.
 
 **Verbruik**: je teamkey heeft $5 budget en maximaal 60 calls per minuut; dat volstaat voor tientallen volledige runs. Gratis tiers van FreeLLMAPI hebben eigen limieten per provider. De viewer en de terminal tonen per run hoeveel tokens het kleine en het grote model gebruikten; het staat ook in `trace.json` onder `verbruik`. Bij een rate limit (429) wacht de kit en probeert opnieuw. Budget op? Dan geeft het endpoint een fout over het budget: schakel over op FreeLLMAPI (blok 2) of vraag een coach.
 
 ## De Koning leidt het debat
 
-`kies_volgende(beurten, leden)` in `council.py` beslist voor elke beurt wie spreekt. De functie krijgt het debat tot nu toe (dezelfde `beurten` als in `trace.json`) en de Raadsleden, en geeft `(rol, vraag, reden)` terug, of `(None, None, reden)` om te stoppen. De kit schrijft elke keuze als `routering`-beurt in de trace (`aan`, `vraag`, `reden`) en stopt zelf na 10 Raadslid-beurten.
+`await kies_volgende(beurten, leden, koning, opties, verbruik)` in `council.py` beslist voor elke beurt wie spreekt. De Koning krijgt de publieke perspectieven, de Raadslid-berichten en eerdere routeringen, zonder bronbestanden of toolresultaten. Hij geeft een JSON-object met `rol`, `vraag`, `reden` en `open_vragen` terug; `rol: null` betekent stoppen. De code schrijft de keuze als `routering` in de trace en stopt altijd na maximaal tien Raadslid-beurten.
 
-Standaard is het een vaste volgorde met `reden: "vaste volgorde"`. Laat jullie Koning beter kiezen: als agent (een LLM die het debat leest), met regels in code, of een mix. Vragen om mee te starten: wie moet een bewering toetsen? Welke Rol ontbreekt nog? Wanneer weet je genoeg? Wat moet elk Raadslid van het debat zien?
+De vaste volgorde is vervangen door `ROUTER_INSTRUCTIES`. Die sturen op ontbrekende perspectieven, tegenbewijs en informatiewinst. Een ongeldige JSON-keuze krijgt één herstelpoging; de code valt niet stilzwijgend terug op een vaste volgorde. Het verdict wordt apart gemaakt met `VERDICT_INSTRUCTIES`. Bewijs-ID's zijn alleen toegestaan als de bijbehorende Rol ze zelf in het debat heeft genoemd. Deze controle bewijst niet dat de bron correct is gelezen of de conclusie klopt: beoordeel dat in de viewer.
 
 ### Na je eerste run: waar kijk je naar?
 
@@ -125,7 +131,7 @@ De vorm:
 Raadsleden + debat tot nu toe  ──►  LLM (MODEL_GROOT)  ──►  {"rol": ..., "vraag": ..., "reden": ...}
 ```
 
-Wat je daarvoor uitzoekt: een chat-call naar hetzelfde endpoint als de Raadsleden, een instructie die zegt wat een goede keuze is (en wanneer de Koning stopt), en het antwoord als JSON uitlezen. Zoektermen: *structured output*, *JSON mode*, *group chat manager* of *speaker selection* (MAF). Let op: `kies_volgende()` is gewone, niet-async code, en modellen zetten soms tekst rond hun JSON.
+Onze implementatie gebruikt hetzelfde endpoint als de Raadsleden en JSON mode. `kies_volgende()` is hiervoor async gemaakt; de debatlus wacht op de keuze met `await`. De JSON-parser accepteert ook een codeblok of korte inleiding, en schema- en inhoudscontroles weigeren ongeldige uitvoer.
 
 ## Spelregels
 
